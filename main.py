@@ -11,7 +11,15 @@ import matplotlib.pyplot as plt
 plt.close("all")
 
 # Make the code device-agnostic
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+#device = 'cuda' if torch.cuda.is_available() else 'cpu'
+if torch.cuda.is_available():
+    device = 'cuda'
+elif torch.backends.mps.is_available():  # Apple Metal Performance Shaders
+    device = 'mps'
+else:
+    device = 'cpu'
+
+print(f"Using device: {device}")
 
 # Import E2E_DRO functions
 from e2edro import e2edro as e2e
@@ -86,7 +94,7 @@ epoch_list = [30, 40, 50, 60, 80, 100]
 set_seed = 1000
 
 # Load saved models (default is False)
-use_cache = True
+use_cache = False
 
 #---------------------------------------------------------------------------------------------------
 # Run 
