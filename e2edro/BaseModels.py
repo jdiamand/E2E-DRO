@@ -103,8 +103,11 @@ class pred_then_opt(nn.Module):
         ep = Y - Y_hat[:-1]
         y_hat = Y_hat[-1]
 
-        # Optimization solver arguments (from CVXPY for SCS solver)
-        solver_args = {'solve_method': 'ECOS'}
+        # Optimization solver arguments (from CVXPY for better solver performance)
+        # Use ECOS with original stable parameters
+        solver_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
+
+
 
         # Optimize z per scenario
         # Determine whether nominal or dro model

@@ -18,7 +18,20 @@ import e2edro.DataLoad as dl
 
 import psutil
 num_cores = psutil.cpu_count()
-torch.set_num_threads(num_cores)
+# For M2 Pro/Max: Use 8-10 threads to avoid thermal throttling
+optimal_threads = min(10, num_cores)
+torch.set_num_threads(optimal_threads)
+
+# Additional PyTorch optimizations for Apple Silicon
+if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+    # Enable MPS optimizations
+    torch.backends.mps.enable_fallback_to_cpu = False
+    # Set memory fraction for MPS
+    if hasattr(torch.backends.mps, 'set_memory_fraction'):
+        torch.backends.mps.set_memory_fraction(0.8)  # Use 80% of GPU memory
+
+print(f"🔧 PyTorch Threading: {optimal_threads}/{num_cores} cores | MPS: {torch.backends.mps.is_available()}")
+
 if psutil.MACOS:
     num_cores = 0
 
@@ -412,9 +425,15 @@ class e2e_net(nn.Module):
         ep = Y - Y_hat[:-1]
         y_hat = Y_hat[-1]
 
-        # Optimization solver arguments (from CVXPY for ECOS/SCS solver)
+        # Optimization solver arguments (from CVXPY for better solver performance)
+        # Use ECOS with original stable parameters
         solver_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
-        # solver_args = {'solve_method': 'SCS', 'eps': 1e-7, 'acceleration_lookback': 5,
+        # Alternative: Clarabel for complex cone problems
+        # solver_args = {'solve_method': 'CLARABEL', 'tol_gap_abs': 1e-6, 'tol_gap_rel': 1e-6}
+
+
+
+
         # 'max_iters':20000}
 
         # Optimize z per scenario

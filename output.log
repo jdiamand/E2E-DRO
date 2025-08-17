@@ -1,0 +1,10 @@
+Using device: mps
+✅ MPS optimizations enabled (float32 precision)
+(CVXPY) Aug 17 02:14:02 AM: Encountered unexpected exception importing solver DIFFCP:
+ImportError('diffcp >= 1.0.15 is required')
+/Users/jdiamand/GWU/Praxis-Projects/E2E-DRO/E2E-DRO/e2edro_env/lib/python3.10/site-packages/diffcp/cone_program.py:422: UserWarning: Solved/Inaccurate.
+  warnings.warn("Solved/Inaccurate.")
+/Users/jdiamand/GWU/Praxis-Projects/E2E-DRO/E2E-DRO/e2edro_env/lib/python3.10/site-packages/diffcp/cone_program.py:422: UserWarning: Solved/Inaccurate.
+  warnings.warn("Solved/Inaccurate.")
+/Users/jdiamand/GWU/Praxis-Projects/E2E-DRO/E2E-DRO/e2edro_env/lib/python3.10/site-packages/diffcp/cone_program.py:422: UserWarning: Solved/Inaccurate.
+  warnings.warn("Solved/Inaccurate.")
