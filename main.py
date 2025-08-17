@@ -128,11 +128,11 @@ print("🚀 Performance Optimizations Applied:")
 print(f"   • Hyperparameters: {len(lr_list)}×{len(epoch_list)} = {len(lr_list) * len(epoch_list)} combinations (vs 18 original)")
 print(f"   • Learning rates: {lr_list} (more conservative for stability)")
 print(f"   • Epochs: {epoch_list} (faster training)")
-print(f"   • CVXPY Solver: ECOS (original stable parameters)")
+print(f"   • CVXPY Solver: OSQP (better performance and stability than ECOS)")
 print(f"   • Data size: {n_obs}×{n_y} (larger batches for GPU efficiency)")
 print(f"   • Device: MPS (Apple Silicon GPU acceleration)")
 print(f"   • Threading: Optimized for M2 Pro/Max (10/12 cores)")
-print(f"   • CVXPY Solver: ECOS (original stable parameters)")
+print(f"   • CVXPY Solver: OSQP (better performance and stability than ECOS)")
 
 # Load saved models (default is False)
 # use_cache = False

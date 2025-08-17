@@ -103,22 +103,109 @@ class pred_then_opt(nn.Module):
         ep = Y - Y_hat[:-1]
         y_hat = Y_hat[-1]
 
-        # Optimization solver arguments (from CVXPY for better solver performance)
-        # Use ECOS with original stable parameters
-        solver_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
+        # Optimization solver arguments (OSQP for better performance and stability)
+        # OSQP is often faster and more stable than ECOS for QP problems
+        solver_args = {
+            'solve_method': 'OSQP', 
+            'max_iter': 1000,
+            'eps_abs': 1e-6,
+            'eps_rel': 1e-6,
+            'warm_start': True
+        }
+        # Alternative: ECOS with original stable parameters (fallback)
+        # solver_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
 
-
-
-        # Optimize z per scenario
+        # Optimize z per scenario using CVXPY directly
         # Determine whether nominal or dro model
         if self.model_type == 'nom':
-            z_star, = self.opt_layer(ep, y_hat, self.gamma, solver_args=solver_args)
+            z_star = self._solve_cvxpy_nominal(ep, y_hat, self.gamma, solver_args)
         elif self.model_type == 'dro':
-            z_star, = self.opt_layer(ep, y_hat, self.gamma, self.delta, solver_args=solver_args)
+            z_star = self._solve_cvxpy_dro(ep, y_hat, self.gamma, self.delta, solver_args)
         elif self.model_type == 'base_mod':
-            z_star, = self.opt_layer(y_hat, solver_args=solver_args)
+            z_star = self._solve_cvxpy_base(y_hat, solver_args)
 
         return z_star, y_hat
+
+    #-----------------------------------------------------------------------------------------------
+    # CVXPY Solver Helper Methods
+    #-----------------------------------------------------------------------------------------------
+    def _solve_cvxpy_base(self, y_hat, solver_args):
+        """Solve base optimization problem using CVXPY directly"""
+        problem, z, y_hat_param = e2e.base_mod(self.n_y, self.n_obs, self.prisk)
+        
+        # Set parameter values
+        y_hat_param.value = y_hat.detach().cpu().numpy()
+        
+        # Solve the problem
+        try:
+            problem.solve(**solver_args)
+            if problem.status == 'optimal':
+                z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
+                return z_star
+            else:
+                # Fallback to ECOS if OSQP fails
+                fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
+                problem.solve(**fallback_args)
+                z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
+                return z_star
+        except Exception as e:
+            print(f"CVXPY solve failed: {e}, falling back to ECOS")
+            fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
+            problem.solve(**fallback_args)
+            z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
+            return z_star
+
+    def _solve_cvxpy_nominal(self, ep, y_hat, gamma, solver_args):
+        """Solve nominal optimization problem using CVXPY directly"""
+        problem, z, y_hat_param = e2e.nominal(self.n_y, self.n_obs, self.prisk)
+        
+        # Set parameter values
+        y_hat_param.value = y_hat.detach().cpu().numpy()
+        
+        # Solve the problem
+        try:
+            problem.solve(**solver_args)
+            if problem.status == 'optimal':
+                z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
+                return z_star
+            else:
+                # Fallback to ECOS if OSQP fails
+                fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
+                problem.solve(**fallback_args)
+                z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
+                return z_star
+        except Exception as e:
+            print(f"CVXPY solve failed: {e}, falling back to ECOS")
+            fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
+            problem.solve(**fallback_args)
+            z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
+            return z_star
+
+    def _solve_cvxpy_dro(self, ep, y_hat, gamma, delta, solver_args):
+        """Solve distributionally robust optimization problem using CVXPY directly"""
+        problem, z, y_hat_param = e2e.hellinger(self.n_y, self.n_obs, self.prisk)
+        
+        # Set parameter values
+        y_hat_param.value = y_hat.detach().cpu().numpy()
+        
+        # Solve the problem
+        try:
+            problem.solve(**solver_args)
+            if problem.status == 'optimal':
+                z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
+                return z_star
+            else:
+                # Fallback to ECOS if OSQP fails
+                fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
+                problem.solve(**fallback_args)
+                z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
+                return z_star
+        except Exception as e:
+            print(f"CVXPY solve failed: {e}, falling back to ECOS")
+            fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
+            problem.solve(**fallback_args)
+            z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
+            return z_star
 
     #-----------------------------------------------------------------------------------------------
     # net_test: Test the e2e neural net
