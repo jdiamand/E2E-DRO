@@ -81,7 +81,13 @@ X, Y = dl.AV(start, end, split, freq=freq, n_obs=n_obs, n_y=n_y, use_cache=True,
 n_x, n_y = X.data.shape[1], Y.data.shape[1]
 
 # Statistical significance analysis of features vs targets
-stats = dl.statanalysis(X.data, Y.data)
+# Convert to numpy arrays to avoid pandas compatibility issues
+try:
+    stats = dl.statanalysis(X.data.values, Y.data.values)
+except Exception as e:
+    print(f"⚠️ Statistical analysis failed: {e}")
+    print("   Continuing without statistical analysis...")
+    stats = None
 
 ####################################################################################################
 # E2E Learning System Run
@@ -136,47 +142,88 @@ print(f"   • CVXPY Solver: OSQP (better performance and stability than ECOS)")
 
 # Load saved models (default is False)
 # use_cache = False
-use_cache = False  # Retrain models from scratch due to pandas compatibility issues
+use_cache = True  # Try to load cached models first, fall back to training if needed
 
 #---------------------------------------------------------------------------------------------------
 # Run 
 #---------------------------------------------------------------------------------------------------
 
 if use_cache:
+    print("🔄 Attempting to load cached models...")
     # Load cached models and backtest results
-    with open(cache_path+'ew_net.pkl', 'rb') as inp:
-        ew_net = pickle.load(inp)
-    with open(cache_path+'po_net.pkl', 'rb') as inp:
-        po_net = pickle.load(inp)
+    try:
+        with open(cache_path+'ew_net.pkl', 'rb') as inp:
+            ew_net = pickle.load(inp)
+            print("✅ ew_net loaded from cache")
+    except Exception as e:
+        print(f"❌ Failed to load ew_net: {e}")
+        ew_net = None
+        
+    try:
+        with open(cache_path+'po_net.pkl', 'rb') as inp:
+            po_net = pickle.load(inp)
+            print("✅ po_net loaded from cache")
+    except Exception as e:
+        print(f"❌ Failed to load po_net: {e}")
+        po_net = None
     # Load base model
     try:
         with open(cache_path+'base_net.pkl', 'rb') as inp:
             base_net = pickle.load(inp)
+            print("✅ base_net loaded from cache")
             # Check if it's our new format and recreate cvxpylayers if needed
             if hasattr(base_net, 'base_layer') and base_net.base_layer is None:
+                print("   🔄 Recreating cvxpylayers for base_net...")
                 base_net.load_model(cache_path+'base_net.pkl')
-    except:
+                print("   ✅ cvxpylayers recreated successfully")
+    except Exception as e:
+        print(f"❌ Failed to load base_net: {e}")
         base_net = None
         
     # Load nominal model
     try:
         with open(cache_path+'nom_net.pkl', 'rb') as inp:
             nom_net = pickle.load(inp)
+            print("✅ nom_net loaded from cache")
             # Check if it's our new format and recreate cvxpylayers if needed
             if hasattr(nom_net, 'nom_layer') and nom_net.nom_layer is None:
+                print("   🔄 Recreating cvxpylayers for nom_net...")
                 nom_net.load_model(cache_path+'nom_net.pkl')
-    except:
+                print("   ✅ cvxpylayers recreated successfully")
+    except Exception as e:
+        print(f"❌ Failed to load nom_net: {e}")
         nom_net = None
         
     # Load DR model
     try:
         with open(cache_path+'dr_net.pkl', 'rb') as inp:
             dr_net = pickle.load(inp)
+            print("✅ dr_net loaded from cache")
             # Check if it's our new format and recreate cvxpylayers if needed
             if hasattr(dr_net, 'dro_layer') and dr_net.dro_layer is None:
+                print("   🔄 Recreating cvxpylayers for dr_net...")
                 dr_net.load_model(cache_path+'dr_net.pkl')
-    except:
+                print("   ✅ cvxpylayers recreated successfully")
+    except Exception as e:
+        print(f"❌ Failed to load dr_net: {e}")
         dr_net = None
+        
+    # Summary of cache loading
+    print("\n📊 Cache Loading Summary:")
+    print(f"   • ew_net: {'✅ Loaded' if ew_net is not None else '❌ Failed'}")
+    print(f"   • po_net: {'✅ Loaded' if po_net is not None else '❌ Failed'}")
+    print(f"   • base_net: {'✅ Loaded' if base_net is not None else '❌ Failed'}")
+    print(f"   • nom_net: {'✅ Loaded' if nom_net is not None else '❌ Failed'}")
+    print(f"   • dr_net: {'✅ Loaded' if dr_net is not None else '❌ Failed'}")
+    
+    # Check if we have enough models to proceed
+    if all([ew_net, po_net, base_net, nom_net, dr_net]):
+        print("🎉 All models loaded successfully from cache!")
+        print("   Proceeding with cached models...")
+    else:
+        print("⚠️ Some models failed to load from cache")
+        print("   Will need to train missing models...")
+        
     with open(cache_path+'dr_po_net.pkl', 'rb') as inp:
         dr_po_net = pickle.load(inp)
     with open(cache_path+'dr_net_learn_delta.pkl', 'rb') as inp:
