@@ -35,8 +35,12 @@ class SlidingWindow(Dataset):
         optimization. Therefore, no pair in 'y' is required (it is assumed the pair y_T is not yet
         observable)
         """
-        self.X = Variable(torch.tensor(X.values, dtype=torch.double))
-        self.Y = Variable(torch.tensor(Y.values, dtype=torch.double))
+        # Handle both pandas DataFrames and numpy arrays
+        X_data = X.values if hasattr(X, 'values') else X
+        Y_data = Y.values if hasattr(Y, 'values') else Y
+        
+        self.X = Variable(torch.tensor(X_data, dtype=torch.double))
+        self.Y = Variable(torch.tensor(Y_data, dtype=torch.double))
         self.n_obs = n_obs
         self.perf_period = perf_period
 
