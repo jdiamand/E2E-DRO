@@ -81,9 +81,14 @@ X, Y = dl.AV(start, end, split, freq=freq, n_obs=n_obs, n_y=n_y, use_cache=True,
 n_x, n_y = X.data.shape[1], Y.data.shape[1]
 
 # Statistical significance analysis of features vs targets
+# Statistical significance analysis of features vs targets
 # Convert to numpy arrays to avoid pandas compatibility issues
 try:
-    stats = dl.statanalysis(X.data.values, Y.data.values)
+    # Ensure we have numpy arrays
+    X_np = X.data.values if hasattr(X.data, 'values') else X.data
+    Y_np = Y.data.values if hasattr(Y.data, 'values') else Y.data
+    stats = dl.statanalysis(X_np, Y_np)
+    print("✅ Statistical analysis completed successfully")
 except Exception as e:
     print(f"⚠️ Statistical analysis failed: {e}")
     print("   Continuing without statistical analysis...")
@@ -224,20 +229,60 @@ if use_cache:
         print("⚠️ Some models failed to load from cache")
         print("   Will need to train missing models...")
         
-    with open(cache_path+'dr_po_net.pkl', 'rb') as inp:
-        dr_po_net = pickle.load(inp)
-    with open(cache_path+'dr_net_learn_delta.pkl', 'rb') as inp:
-        dr_net_learn_delta = pickle.load(inp)
-    with open(cache_path+'nom_net_learn_gamma.pkl', 'rb') as inp:
-        nom_net_learn_gamma = pickle.load(inp)
-    with open(cache_path+'dr_net_learn_gamma.pkl', 'rb') as inp:
-        dr_net_learn_gamma = pickle.load(inp)
-    with open(cache_path+'dr_net_learn_gamma_delta.pkl', 'rb') as inp:
-        dr_net_learn_gamma_delta = pickle.load(inp)
-    with open(cache_path+'nom_net_learn_theta.pkl', 'rb') as inp:
-        nom_net_learn_theta = pickle.load(inp)
-    with open(cache_path+'dr_net_learn_theta.pkl', 'rb') as inp:
-        dr_net_learn_theta = pickle.load(inp)
+    try:
+        with open(cache_path+'dr_po_net.pkl', 'rb') as inp:
+            dr_po_net = pickle.load(inp)
+            print("✅ dr_po_net loaded from cache")
+    except Exception as e:
+        print(f"❌ Failed to load dr_po_net: {e}")
+        dr_po_net = None
+    try:
+        with open(cache_path+'dr_net_learn_delta.pkl', 'rb') as inp:
+            dr_net_learn_delta = pickle.load(inp)
+            print("✅ dr_net_learn_delta loaded from cache")
+    except Exception as e:
+        print(f"❌ Failed to load dr_net_learn_delta: {e}")
+        dr_net_learn_delta = None
+        
+    try:
+        with open(cache_path+'nom_net_learn_gamma.pkl', 'rb') as inp:
+            nom_net_learn_gamma = pickle.load(inp)
+            print("✅ nom_net_learn_gamma loaded from cache")
+    except Exception as e:
+        print(f"❌ Failed to load nom_net_learn_gamma: {e}")
+        nom_net_learn_gamma = None
+        
+    try:
+        with open(cache_path+'dr_net_learn_gamma.pkl', 'rb') as inp:
+            dr_net_learn_gamma = pickle.load(inp)
+            print("✅ dr_net_learn_gamma loaded from cache")
+    except Exception as e:
+        print(f"❌ Failed to load dr_net_learn_gamma: {e}")
+        dr_net_learn_gamma = None
+        
+    try:
+        with open(cache_path+'dr_net_learn_gamma_delta.pkl', 'rb') as inp:
+            dr_net_learn_gamma_delta = pickle.load(inp)
+            print("✅ dr_net_learn_gamma_delta loaded from cache")
+    except Exception as e:
+        print(f"❌ Failed to load dr_net_learn_gamma_delta: {e}")
+        dr_net_learn_gamma_delta = None
+        
+    try:
+        with open(cache_path+'nom_net_learn_theta.pkl', 'rb') as inp:
+            nom_net_learn_theta = pickle.load(inp)
+            print("✅ nom_net_learn_theta loaded from cache")
+    except Exception as e:
+        print(f"❌ Failed to load nom_net_learn_theta: {e}")
+        nom_net_learn_theta = None
+        
+    try:
+        with open(cache_path+'dr_net_learn_theta.pkl', 'rb') as inp:
+            dr_net_learn_theta = pickle.load(inp)
+            print("✅ dr_net_learn_theta loaded from cache")
+    except Exception as e:
+        print(f"❌ Failed to load dr_net_learn_theta: {e}")
+        dr_net_learn_theta = None
 
     # Load extended models with error handling
     try:
@@ -257,25 +302,77 @@ if use_cache:
             dr_net_ext = pickle.load(inp)
     except:
         dr_net_ext = None
-    with open(cache_path+'dr_net_learn_delta_ext.pkl', 'rb') as inp:
-        dr_net_learn_delta_ext = pickle.load(inp)
-    with open(cache_path+'nom_net_learn_gamma_ext.pkl', 'rb') as inp:
-        nom_net_learn_gamma_ext = pickle.load(inp)
-    with open(cache_path+'dr_net_learn_gamma_ext.pkl', 'rb') as inp:
-        dr_net_learn_gamma_ext = pickle.load(inp)
-    with open(cache_path+'nom_net_learn_theta_ext.pkl', 'rb') as inp:
-        nom_net_learn_theta_ext = pickle.load(inp)
-    with open(cache_path+'dr_net_learn_theta_ext.pkl', 'rb') as inp:
-        dr_net_learn_theta_ext = pickle.load(inp)
+    try:
+        with open(cache_path+'dr_net_learn_delta_ext.pkl', 'rb') as inp:
+            dr_net_learn_delta_ext = pickle.load(inp)
+            print("✅ dr_net_learn_delta_ext loaded from cache")
+    except Exception as e:
+        print(f"❌ Failed to load dr_net_learn_delta_ext: {e}")
+        dr_net_learn_delta_ext = None
+        
+    try:
+        with open(cache_path+'nom_net_learn_gamma_ext.pkl', 'rb') as inp:
+            nom_net_learn_gamma_ext = pickle.load(inp)
+            print("✅ nom_net_learn_gamma_ext loaded from cache")
+    except Exception as e:
+        print(f"❌ Failed to load nom_net_learn_gamma_ext: {e}")
+        nom_net_learn_gamma_ext = None
+        
+    try:
+        with open(cache_path+'dr_net_learn_gamma_ext.pkl', 'rb') as inp:
+            dr_net_learn_gamma_ext = pickle.load(inp)
+            print("✅ dr_net_learn_gamma_ext loaded from cache")
+    except Exception as e:
+        print(f"❌ Failed to load dr_net_learn_gamma_ext: {e}")
+        dr_net_learn_gamma_ext = None
+        
+    try:
+        with open(cache_path+'nom_net_learn_theta_ext.pkl', 'rb') as inp:
+            nom_net_learn_theta_ext = pickle.load(inp)
+            print("✅ nom_net_learn_theta_ext loaded from cache")
+    except Exception as e:
+        print(f"❌ Failed to load nom_net_learn_theta_ext: {e}")
+        nom_net_learn_theta_ext = None
+        
+    try:
+        with open(cache_path+'dr_net_learn_theta_ext.pkl', 'rb') as inp:
+            dr_net_learn_theta_ext = pickle.load(inp)
+            print("✅ dr_net_learn_theta_ext loaded from cache")
+    except Exception as e:
+        print(f"❌ Failed to load dr_net_learn_theta_ext: {e}")
+        dr_net_learn_theta_ext = None
 
-    with open(cache_path+'dr_net_tv.pkl', 'rb') as inp:
-        dr_net_tv = pickle.load(inp)
-    with open(cache_path+'dr_net_tv_learn_delta.pkl', 'rb') as inp:
-        dr_net_tv_learn_delta = pickle.load(inp)
-    with open(cache_path+'dr_net_tv_learn_gamma.pkl', 'rb') as inp:
-        dr_net_tv_learn_gamma = pickle.load(inp)
-    with open(cache_path+'dr_net_tv_learn_theta.pkl', 'rb') as inp:
-        dr_net_tv_learn_theta = pickle.load(inp)
+    try:
+        with open(cache_path+'dr_net_tv.pkl', 'rb') as inp:
+            dr_net_tv = pickle.load(inp)
+            print("✅ dr_net_tv loaded from cache")
+    except Exception as e:
+        print(f"❌ Failed to load dr_net_tv: {e}")
+        dr_net_tv = None
+        
+    try:
+        with open(cache_path+'dr_net_tv_learn_delta.pkl', 'rb') as inp:
+            dr_net_tv_learn_delta = pickle.load(inp)
+            print("✅ dr_net_tv_learn_delta loaded from cache")
+    except Exception as e:
+        print(f"❌ Failed to load dr_net_tv_learn_delta: {e}")
+        dr_net_tv_learn_delta = None
+        
+    try:
+        with open(cache_path+'dr_net_tv_learn_gamma.pkl', 'rb') as inp:
+            dr_net_tv_learn_gamma = pickle.load(inp)
+            print("✅ dr_net_tv_learn_gamma loaded from cache")
+    except Exception as e:
+        print(f"❌ Failed to load dr_net_tv_learn_gamma: {e}")
+        dr_net_tv_learn_gamma = None
+        
+    try:
+        with open(cache_path+'dr_net_tv_learn_theta.pkl', 'rb') as inp:
+            dr_net_tv_learn_theta = pickle.load(inp)
+            print("✅ dr_net_tv_learn_theta loaded from cache")
+    except Exception as e:
+        print(f"❌ Failed to load dr_net_tv_learn_theta: {e}")
+        dr_net_tv_learn_theta = None
 else:
     # Exp 1: Equal weight portfolio
     ew_net = bm.equal_weight(n_x, n_y, n_obs)
