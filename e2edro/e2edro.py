@@ -5,7 +5,7 @@
 ####################################################################################################
 import numpy as np
 import cvxpy as cp
-# Removed CvxpyLayer import - using regular CVXPY for OSQP support
+from cvxpylayers.torch import CvxpyLayer
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -328,6 +328,9 @@ class e2e_net(nn.Module):
 
         # Define performance loss
         self.perf_loss = eval('lf.'+perf_loss)
+        
+        # Store risk function reference
+        self.prisk = prisk
 
         # Number of time steps to evaluate the task loss
         self.perf_period = perf_period
@@ -335,6 +338,7 @@ class e2e_net(nn.Module):
         # Register 'gamma' (risk-return trade-off parameter)
         self.gamma = nn.Parameter(torch.FloatTensor(1).uniform_(0.02, 0.1))
         self.gamma.requires_grad = train_gamma
+        self.gamma.data = self.gamma.data.double()  # Convert parameter data to double precision
         self.gamma_init = self.gamma.item()
 
         # Record the model design: nominal, base or DRO
@@ -353,6 +357,7 @@ class e2e_net(nn.Module):
                 lb = (1 - 1/n_obs) / 10
             self.delta = nn.Parameter(torch.FloatTensor(1).uniform_(lb, ub))
             self.delta.requires_grad = train_delta
+            self.delta.data = self.delta.data.double()  # Convert parameter data to double precision
             self.delta_init = self.delta.item()
             self.model_type = 'dro'
 
@@ -360,7 +365,7 @@ class e2e_net(nn.Module):
         self.pred_model = pred_model
         if pred_model == 'linear':
             # Linear prediction model
-            self.pred_layer = nn.Linear(n_x, n_y)
+            self.pred_layer = nn.Linear(n_x, n_y).double()  # Convert to double precision
             self.pred_layer.weight.requires_grad = train_pred
             self.pred_layer.bias.requires_grad = train_pred
         elif pred_model == '2layer':
@@ -380,8 +385,19 @@ class e2e_net(nn.Module):
                       nn.ReLU(),
                       nn.Linear(n_y, n_y))
 
-        # LAYER: Optimization model
-        self.opt_layer = eval(opt_layer)(n_y, n_obs, eval('rf.'+prisk))
+        # Store opt_layer for later use
+        self.opt_layer = opt_layer
+        
+        # LAYER: Optimization model - Create CvxpyLayer instances
+        if opt_layer == 'base_mod':
+            self.base_problem, self.base_z, self.base_y_hat_param = base_mod(n_y, n_obs, eval('rf.'+prisk))
+            self.base_layer = CvxpyLayer(self.base_problem, parameters=[self.base_y_hat_param], variables=[self.base_z])
+        elif opt_layer == 'nominal':
+            self.nom_problem, self.nom_z, self.nom_y_hat_param, self.nom_ep_param, self.nom_gamma_param = nominal(n_y, n_obs, eval('rf.'+prisk))
+            self.nom_layer = CvxpyLayer(self.nom_problem, parameters=[self.nom_y_hat_param, self.nom_ep_param, self.nom_gamma_param], variables=[self.nom_z])
+        elif opt_layer == 'hellinger':
+            self.dro_problem, self.dro_z, self.dro_y_hat_param, self.dro_ep_param, self.dro_gamma_param, self.dro_delta_param = hellinger(n_y, n_obs, eval('rf.'+prisk))
+            self.dro_layer = CvxpyLayer(self.dro_problem, parameters=[self.dro_y_hat_param, self.dro_ep_param, self.dro_gamma_param, self.dro_delta_param], variables=[self.dro_z])
         
         # Store reference path to store model data
         self.cache_path = cache_path
@@ -439,97 +455,18 @@ class e2e_net(nn.Module):
         # Alternative: Clarabel for complex cone problems
         # solver_args = {'solve_method': 'CLARABEL', 'tol_gap_abs': 1e-6, 'tol_gap_rel': 1e-6}
 
-        # Optimize z per scenario using CVXPY directly
+        # Optimize z per scenario using CvxpyLayer for differentiable optimization
         # Determine whether nominal or dro model
         if self.model_type == 'nom':
-            z_star = self._solve_cvxpy_nominal(ep, y_hat, self.gamma, solver_args)
+            z_star = self.nom_layer(y_hat, ep, self.gamma)[0]
         elif self.model_type == 'dro':
-            z_star = self._solve_cvxpy_dro(ep, y_hat, self.gamma, self.delta, solver_args)
+            z_star = self.dro_layer(y_hat, ep, self.gamma, self.delta)[0]
         elif self.model_type == 'base_mod':
-            z_star = self._solve_cvxpy_base(y_hat, solver_args)
+            z_star = self.base_layer(y_hat)[0]
 
         return z_star, y_hat
 
-    #-----------------------------------------------------------------------------------------------
-    # CVXPY Solver Helper Methods
-    #-----------------------------------------------------------------------------------------------
-    def _solve_cvxpy_base(self, y_hat, solver_args):
-        """Solve base optimization problem using CVXPY directly"""
-        problem, z, y_hat_param = base_mod(self.n_y, self.n_obs, self.prisk)
-        
-        # Set parameter values
-        y_hat_param.value = y_hat.detach().cpu().numpy()
-        
-        # Solve the problem
-        try:
-            problem.solve(**solver_args)
-            if problem.status == 'optimal':
-                z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
-                return z_star
-            else:
-                # Fallback to ECOS if OSQP fails
-                fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
-                problem.solve(**fallback_args)
-                z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
-                return z_star
-        except Exception as e:
-            print(f"CVXPY solve failed: {e}, falling back to ECOS")
-            fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
-            problem.solve(**fallback_args)
-            z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
-            return z_star
-
-    def _solve_cvxpy_nominal(self, ep, y_hat, gamma, solver_args):
-        """Solve nominal optimization problem using CVXPY directly"""
-        problem, z, y_hat_param = nominal(self.n_y, self.n_obs, self.prisk)
-        
-        # Set parameter values
-        y_hat_param.value = y_hat.detach().cpu().numpy()
-        
-        # Solve the problem
-        try:
-            problem.solve(**solver_args)
-            if problem.status == 'optimal':
-                z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
-                return z_star
-            else:
-                # Fallback to ECOS if OSQP fails
-                fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
-                problem.solve(**fallback_args)
-                z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
-                return z_star
-        except Exception as e:
-            print(f"CVXPY solve failed: {e}, falling back to ECOS")
-            fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
-            problem.solve(**fallback_args)
-            z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
-            return z_star
-
-    def _solve_cvxpy_dro(self, ep, y_hat, gamma, delta, solver_args):
-        """Solve distributionally robust optimization problem using CVXPY directly"""
-        problem, z, y_hat_param = hellinger(self.n_y, self.n_obs, self.prisk) # Assuming hellinger is the correct layer for DRO
-        
-        # Set parameter values
-        y_hat_param.value = y_hat.detach().cpu().numpy()
-        
-        # Solve the problem
-        try:
-            problem.solve(**solver_args)
-            if problem.status == 'optimal':
-                z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
-                return z_star
-            else:
-                # Fallback to ECOS if OSQP fails
-                fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
-                problem.solve(**fallback_args)
-                z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
-                return z_star
-        except Exception as e:
-            print(f"CVXPY solve failed: {e}, falling back to ECOS")
-            fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
-            problem.solve(**fallback_args)
-            z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
-            return z_star
+    
 
     #-----------------------------------------------------------------------------------------------
     # net_train: Train the e2e neural net
@@ -838,3 +775,132 @@ class e2e_net(nn.Module):
         idx = cv_results.val_loss.idxmin()
         self.lr = cv_results.lr[idx]
         self.epochs = cv_results.epochs[idx]
+
+    #-----------------------------------------------------------------------------------------------
+    # Custom Serialization Methods for CvxpyLayer Objects
+    #-----------------------------------------------------------------------------------------------
+    def __getstate__(self):
+        """Custom pickle serialization to handle cvxpylayers objects"""
+        state = self.__dict__.copy()
+        
+        # Remove cvxpylayers objects that can't be pickled
+        # These will be recreated when the model is loaded
+        if hasattr(self, 'base_layer'):
+            state['base_layer'] = None
+        if hasattr(self, 'nom_layer'):
+            state['nom_layer'] = None
+        if hasattr(self, 'dro_layer'):
+            state['dro_layer'] = None
+            
+        # Remove CVXPY problem objects that can't be pickled
+        if hasattr(self, 'base_problem'):
+            state['base_problem'] = None
+        if hasattr(self, 'nom_problem'):
+            state['nom_problem'] = None
+        if hasattr(self, 'dro_problem'):
+            state['dro_problem'] = None
+            
+        # Remove CVXPY variable objects that can't be pickled
+        if hasattr(self, 'base_z'):
+            state['base_z'] = None
+        if hasattr(self, 'nom_z'):
+            state['nom_z'] = None
+        if hasattr(self, 'dro_z') and self.dro_z is not None:
+            state['dro_z'] = None
+            
+        # Remove CVXPY parameter objects that can't be pickled
+        if hasattr(self, 'base_y_hat_param'):
+            state['base_y_hat_param'] = None
+        if hasattr(self, 'nom_y_hat_param'):
+            state['nom_y_hat_param'] = None
+        if hasattr(self, 'nom_ep_param'):
+            state['nom_ep_param'] = None
+        if hasattr(self, 'nom_gamma_param'):
+            state['nom_gamma_param'] = None
+        if hasattr(self, 'dro_y_hat_param'):
+            state['dro_y_hat_param'] = None
+        if hasattr(self, 'dro_ep_param'):
+            state['dro_ep_param'] = None
+        if hasattr(self, 'dro_gamma_param'):
+            state['dro_gamma_param'] = None
+        if hasattr(self, 'dro_delta_param'):
+            state['dro_delta_param'] = None
+            
+        return state
+    
+    def save_model(self, filepath):
+        """Save only the essential model parameters (weights, biases, trained params)"""
+        import pickle
+        
+        # Create a minimal state with only essential parameters
+        save_state = {
+            'pred_layer_state': self.pred_layer.state_dict() if hasattr(self, 'pred_layer') else None,
+            'gamma': self.gamma.data.clone() if hasattr(self, 'gamma') else None,
+            'delta': self.delta.data.clone() if hasattr(self, 'delta') else None,
+            'opt_layer': self.opt_layer,
+            'n_y': self.n_y,
+            'n_obs': self.n_obs,
+            'prisk': self.prisk,
+            'pred_model': self.pred_model,
+            'cv_results': getattr(self, 'cv_results', None),
+            'portfolio': getattr(self, 'portfolio', None),
+            'epochs': getattr(self, 'epochs', None)
+        }
+        
+        with open(filepath, 'wb') as f:
+            pickle.dump(save_state, f, pickle.HIGHEST_PROTOCOL)
+        print(f"✅ Model saved to {filepath}")
+    
+    def load_model(self, filepath):
+        """Load model parameters and recreate cvxpylayers objects"""
+        import pickle
+        
+        with open(filepath, 'rb') as f:
+            save_state = pickle.load(f)
+        
+        # Restore essential parameters
+        if save_state['pred_layer_state'] is not None:
+            self.pred_layer.load_state_dict(save_state['pred_layer_state'])
+        if save_state['gamma'] is not None:
+            self.gamma.data = save_state['gamma']
+        if save_state['delta'] is not None:
+            self.delta.data = save_state['delta']
+        
+        # Restore other attributes
+        for key, value in save_state.items():
+            if key not in ['pred_layer_state', 'gamma', 'delta']:
+                setattr(self, key, value)
+        
+        # Recreate cvxpylayers objects
+        if hasattr(self, 'opt_layer'):
+            if self.opt_layer == 'base_mod':
+                import e2edro.RiskFunctions as rf
+                self.base_problem, self.base_z, self.base_y_hat_param = base_mod(self.n_y, self.n_obs, eval('rf.'+self.prisk))
+                self.base_layer = CvxpyLayer(self.base_problem, parameters=[self.base_y_hat_param], variables=[self.base_z])
+            elif self.opt_layer == 'nominal':
+                import e2edro.RiskFunctions as rf
+                self.nom_problem, self.nom_z, self.nom_y_hat_param, self.nom_ep_param, self.nom_gamma_param = nominal(self.n_y, self.n_obs, eval('rf.'+self.prisk))
+                self.nom_layer = CvxpyLayer(self.nom_problem, parameters=[self.nom_y_hat_param, self.nom_ep_param, self.nom_gamma_param], variables=[self.nom_z])
+            elif self.opt_layer == 'hellinger':
+                import e2edro.RiskFunctions as rf
+                self.dro_problem, self.dro_z, self.dro_y_hat_param, self.dro_ep_param, self.dro_gamma_param, self.dro_delta_param = hellinger(self.n_y, self.n_obs, eval('rf.'+self.prisk))
+                self.dro_layer = CvxpyLayer(self.dro_problem, parameters=[self.dro_y_hat_param, self.dro_ep_param, self.dro_gamma_param, self.dro_delta_param], variables=[self.dro_z])
+
+    def __setstate__(self, state):
+        """Custom pickle deserialization to recreate cvxpylayers objects"""
+        self.__dict__.update(state)
+        
+        # Recreate cvxpylayers objects if opt_layer is available
+        if hasattr(self, 'opt_layer'):
+            if self.opt_layer == 'base_mod':
+                import e2edro.RiskFunctions as rf
+                self.base_problem, self.base_z, self.base_y_hat_param = base_mod(self.n_y, self.n_obs, eval('rf.'+self.prisk))
+                self.base_layer = CvxpyLayer(self.base_problem, parameters=[self.base_y_hat_param], variables=[self.base_z])
+            elif self.opt_layer == 'nominal':
+                import e2edro.RiskFunctions as rf
+                self.nom_problem, self.nom_z, self.nom_y_hat_param, self.nom_ep_param, self.nom_gamma_param = nominal(self.n_y, self.n_obs, eval('rf.'+self.prisk))
+                self.nom_layer = CvxpyLayer(self.nom_problem, parameters=[self.nom_y_hat_param, self.nom_ep_param, self.nom_gamma_param], variables=[self.nom_z])
+            elif self.opt_layer == 'hellinger':
+                import e2edro.RiskFunctions as rf
+                self.dro_problem, self.dro_z, self.dro_y_hat_param, self.dro_ep_param, self.dro_gamma_param, self.dro_delta_param = hellinger(self.n_y, self.n_obs, eval('rf.'+self.prisk))
+                self.dro_layer = CvxpyLayer(self.dro_problem, parameters=[self.dro_y_hat_param, self.dro_ep_param, self.dro_gamma_param, self.dro_delta_param], variables=[self.dro_z])

@@ -148,12 +148,35 @@ if use_cache:
         ew_net = pickle.load(inp)
     with open(cache_path+'po_net.pkl', 'rb') as inp:
         po_net = pickle.load(inp)
-    with open(cache_path+'base_net.pkl', 'rb') as inp:
-        base_net = pickle.load(inp)
-    with open(cache_path+'nom_net.pkl', 'rb') as inp:
-        nom_net = pickle.load(inp)
-    with open(cache_path+'dr_net.pkl', 'rb') as inp:
-        dr_net = pickle.load(inp)
+    # Load base model
+    try:
+        with open(cache_path+'base_net.pkl', 'rb') as inp:
+            base_net = pickle.load(inp)
+            # Check if it's our new format and recreate cvxpylayers if needed
+            if hasattr(base_net, 'base_layer') and base_net.base_layer is None:
+                base_net.load_model(cache_path+'base_net.pkl')
+    except:
+        base_net = None
+        
+    # Load nominal model
+    try:
+        with open(cache_path+'nom_net.pkl', 'rb') as inp:
+            nom_net = pickle.load(inp)
+            # Check if it's our new format and recreate cvxpylayers if needed
+            if hasattr(nom_net, 'nom_layer') and nom_net.nom_layer is None:
+                nom_net.load_model(cache_path+'nom_net.pkl')
+    except:
+        nom_net = None
+        
+    # Load DR model
+    try:
+        with open(cache_path+'dr_net.pkl', 'rb') as inp:
+            dr_net = pickle.load(inp)
+            # Check if it's our new format and recreate cvxpylayers if needed
+            if hasattr(dr_net, 'dro_layer') and dr_net.dro_layer is None:
+                dr_net.load_model(cache_path+'dr_net.pkl')
+    except:
+        dr_net = None
     with open(cache_path+'dr_po_net.pkl', 'rb') as inp:
         dr_po_net = pickle.load(inp)
     with open(cache_path+'dr_net_learn_delta.pkl', 'rb') as inp:
@@ -169,12 +192,24 @@ if use_cache:
     with open(cache_path+'dr_net_learn_theta.pkl', 'rb') as inp:
         dr_net_learn_theta = pickle.load(inp)
 
-    with open(cache_path+'base_net_ext.pkl', 'rb') as inp:
-        base_net_ext = pickle.load(inp)
-    with open(cache_path+'nom_net_ext.pkl', 'rb') as inp:
-        nom_net_ext = pickle.load(inp)
-    with open(cache_path+'dr_net_ext.pkl', 'rb') as inp:
-        dr_net_ext = pickle.load(inp)
+    # Load extended models with error handling
+    try:
+        with open(cache_path+'base_net_ext.pkl', 'rb') as inp:
+            base_net_ext = pickle.load(inp)
+    except:
+        base_net_ext = None
+        
+    try:
+        with open(cache_path+'nom_net_ext.pkl', 'rb') as inp:
+            nom_net_ext = pickle.load(inp)
+    except:
+        nom_net_ext = None
+        
+    try:
+        with open(cache_path+'dr_net_ext.pkl', 'rb') as inp:
+            dr_net_ext = pickle.load(inp)
+    except:
+        dr_net_ext = None
     with open(cache_path+'dr_net_learn_delta_ext.pkl', 'rb') as inp:
         dr_net_learn_delta_ext = pickle.load(inp)
     with open(cache_path+'nom_net_learn_gamma_ext.pkl', 'rb') as inp:
@@ -203,7 +238,7 @@ else:
     print('ew_net run complete')
 
     # Exp 1, 2, 3: Predict-then-optimize system
-    po_net = bm.pred_then_opt(n_x, n_y, n_obs, set_seed=set_seed, prisk=prisk).double()
+    po_net = bm.pred_then_opt(n_x, n_y, n_obs, set_seed=set_seed, prisk=prisk)
     po_net.net_roll_test(X, Y)
     with open(cache_path+'po_net.pkl', 'wb') as outp:
         pickle.dump(po_net, outp, pickle.HIGHEST_PROTOCOL)
@@ -213,11 +248,10 @@ else:
     base_net = e2e.e2e_net(n_x, n_y, n_obs, prisk=prisk,
                         train_pred=True, train_gamma=False, train_delta=False,
                         set_seed=set_seed, opt_layer='base_mod', perf_loss=perf_loss, 
-                        perf_period=perf_period, pred_loss_factor=pred_loss_factor).double()
+                        perf_period=perf_period, pred_loss_factor=pred_loss_factor)
     base_net.net_cv(X, Y, lr_list, epoch_list)
     base_net.net_roll_test(X, Y)
-    with open(cache_path+'base_net.pkl', 'wb') as outp:
-        pickle.dump(base_net, outp, pickle.HIGHEST_PROTOCOL)
+    base_net.save_model(cache_path+'base_net.pkl')
     print('base_net run complete')
 
     # Exp 1: Nominal E2E
@@ -225,11 +259,10 @@ else:
                         train_pred=True, train_gamma=True, train_delta=False,
                         set_seed=set_seed, opt_layer='nominal', perf_loss=perf_loss, 
                         cache_path=cache_path, perf_period=perf_period,
-                        pred_loss_factor=pred_loss_factor).double()
+                        pred_loss_factor=pred_loss_factor)
     nom_net.net_cv(X, Y, lr_list, epoch_list)
     nom_net.net_roll_test(X, Y)
-    with open(cache_path+'nom_net.pkl', 'wb') as outp:
-        pickle.dump(nom_net, outp, pickle.HIGHEST_PROTOCOL)
+    nom_net.save_model(cache_path+'nom_net.pkl')
     print('nom_net run complete')
 
     # Exp 1: DR E2E
@@ -237,16 +270,15 @@ else:
                         train_pred=True, train_gamma=True, train_delta=True,
                         set_seed=set_seed, opt_layer=dr_layer, perf_loss=perf_loss, 
                         cache_path=cache_path, perf_period=perf_period,
-                        pred_loss_factor=pred_loss_factor).double()
+                        pred_loss_factor=pred_loss_factor)
     dr_net.net_cv(X, Y, lr_list, epoch_list)
     dr_net.net_roll_test(X, Y)
-    with open(cache_path+'dr_net.pkl', 'wb') as outp:
-        pickle.dump(dr_net, outp, pickle.HIGHEST_PROTOCOL)
+    dr_net.save_model(cache_path+'dr_net.pkl')
     print('dr_net run complete')
 
     # Exp 2: DR predict-then-optimize system
     dr_po_net = bm.pred_then_opt(n_x, n_y, n_obs, set_seed=set_seed, prisk=prisk,
-                                opt_layer=dr_layer).double()
+                                opt_layer=dr_layer)
     dr_po_net.net_roll_test(X, Y)
     with open(cache_path+'dr_po_net.pkl', 'wb') as outp:
         pickle.dump(dr_po_net, outp, pickle.HIGHEST_PROTOCOL)
@@ -257,11 +289,10 @@ else:
                         train_pred=False, train_gamma=False, train_delta=True,
                         set_seed=set_seed, opt_layer=dr_layer, perf_loss=perf_loss, 
                         cache_path=cache_path, perf_period=perf_period,
-                        pred_loss_factor=pred_loss_factor).double()
+                        pred_loss_factor=pred_loss_factor)
     dr_net_learn_delta.net_cv(X, Y, lr_list, epoch_list)
     dr_net_learn_delta.net_roll_test(X, Y)
-    with open(cache_path+'dr_net_learn_delta.pkl', 'wb') as outp:
-        pickle.dump(dr_net_learn_delta, outp, pickle.HIGHEST_PROTOCOL)
+    dr_net_learn_delta.save_model(cache_path+'dr_net_learn_delta.pkl')
     print('dr_net_learn_delta run complete')
 
     # Exp 3: Nominal E2E (fixed theta, learn gamma)
@@ -269,11 +300,10 @@ else:
                         train_pred=False, train_gamma=True, train_delta=False,
                         set_seed=set_seed, opt_layer='nominal', perf_loss=perf_loss, 
                         cache_path=cache_path, perf_period=perf_period,
-                        pred_loss_factor=pred_loss_factor).double()
+                        pred_loss_factor=pred_loss_factor)
     nom_net_learn_gamma.net_cv(X, Y, lr_list, epoch_list)
     nom_net_learn_gamma.net_roll_test(X, Y)
-    with open(cache_path+'nom_net_learn_gamma.pkl', 'wb') as outp:
-        pickle.dump(nom_net_learn_gamma, outp, pickle.HIGHEST_PROTOCOL)
+    nom_net_learn_gamma.save_model(cache_path+'nom_net_learn_gamma.pkl')
     print('nom_net_learn_gamma run complete')
 
     # Exp 3: DR E2E (fixed theta, learn gamma, fixed delta)
@@ -281,11 +311,10 @@ else:
                         train_pred=False, train_gamma=True, train_delta=False,
                         set_seed=set_seed, opt_layer=dr_layer, perf_loss=perf_loss, 
                         cache_path=cache_path, perf_period=perf_period,
-                        pred_loss_factor=pred_loss_factor).double()
+                        pred_loss_factor=pred_loss_factor)
     dr_net_learn_gamma.net_cv(X, Y, lr_list, epoch_list)
     dr_net_learn_gamma.net_roll_test(X, Y)
-    with open(cache_path+'dr_net_learn_gamma.pkl', 'wb') as outp:
-        pickle.dump(dr_net_learn_gamma, outp, pickle.HIGHEST_PROTOCOL)
+    dr_net_learn_gamma.save_model(cache_path+'dr_net_learn_gamma.pkl')
     print('dr_net_learn_gamma run complete')
 
     # Exp 4: Nominal E2E (learn theta, fixed gamma)
@@ -293,11 +322,10 @@ else:
                         train_pred=True, train_gamma=False, train_delta=False,
                         set_seed=set_seed, opt_layer='nominal', perf_loss=perf_loss, 
                         cache_path=cache_path, perf_period=perf_period,
-                        pred_loss_factor=pred_loss_factor).double()
+                        pred_loss_factor=pred_loss_factor)
     nom_net_learn_theta.net_cv(X, Y, lr_list, epoch_list)
     nom_net_learn_theta.net_roll_test(X, Y)
-    with open(cache_path+'nom_net_learn_theta.pkl', 'wb') as outp:
-        pickle.dump(nom_net_learn_theta, outp, pickle.HIGHEST_PROTOCOL)
+    nom_net_learn_theta.save_model(cache_path+'nom_net_learn_theta.pkl')
     print('nom_net_learn_theta run complete')
 
     # Exp 4: DR E2E (learn theta, fixed gamma and delta)
@@ -305,11 +333,10 @@ else:
                         train_pred=True, train_gamma=False, train_delta=False,
                         set_seed=set_seed, opt_layer=dr_layer, perf_loss=perf_loss, 
                         cache_path=cache_path, perf_period=perf_period,
-                        pred_loss_factor=pred_loss_factor).double()
+                        pred_loss_factor=pred_loss_factor)
     dr_net_learn_theta.net_cv(X, Y, lr_list, epoch_list)
     dr_net_learn_theta.net_roll_test(X, Y)
-    with open(cache_path+'dr_net_learn_theta.pkl', 'wb') as outp:
-        pickle.dump(dr_net_learn_theta, outp, pickle.HIGHEST_PROTOCOL)
+    dr_net_learn_theta.save_model(cache_path+'dr_net_learn_theta.pkl')
     print('dr_net_learn_theta run complete')
 
 ####################################################################################################
@@ -601,22 +628,20 @@ else:
     nom_net_linear = e2e.e2e_net(n_x, n_y, n_obs, prisk=prisk, train_pred=train_pred, 
                     train_gamma=True, train_delta=True, 
                     set_seed=set_seed, opt_layer='nominal', perf_loss=perf_loss, 
-                    perf_period=perf_period, pred_loss_factor=pred_loss_factor).double()
+                    perf_period=perf_period, pred_loss_factor=pred_loss_factor)
     nom_net_linear.net_cv(X, Y, lr_list, epoch_list, n_val=1)
     nom_net_linear.net_roll_test(X, Y, n_roll=1)
-    with open(cache_path+'nom_net_linear.pkl', 'wb') as outp:
-        pickle.dump(nom_net_linear, outp, pickle.HIGHEST_PROTOCOL)
+    nom_net_linear.save_model(cache_path+'nom_net_linear.pkl')
     print('nom_net_linear run complete')
 
     # DR E2E linear
     dr_net_linear = e2e.e2e_net(n_x, n_y, n_obs, prisk=prisk, train_pred=train_pred, 
                     train_gamma=True, train_delta=True, 
                     set_seed=set_seed, opt_layer=dr_layer, perf_loss=perf_loss, 
-                    perf_period=perf_period, pred_loss_factor=pred_loss_factor).double()
+                    perf_period=perf_period, pred_loss_factor=pred_loss_factor)
     dr_net_linear.net_cv(X, Y, lr_list, epoch_list, n_val=1)
     dr_net_linear.net_roll_test(X, Y, n_roll=1)
-    with open(cache_path+'dr_net_linear.pkl', 'wb') as outp:
-        pickle.dump(dr_net_linear, outp, pickle.HIGHEST_PROTOCOL)
+    dr_net_linear.save_model(cache_path+'dr_net_linear.pkl')
     print('dr_net_linear run complete')
 
     #***********************************************************************************************
@@ -630,22 +655,20 @@ else:
     nom_net_2layer = e2e.e2e_net(n_x, n_y, n_obs, prisk=prisk, train_pred=train_pred, 
                     train_gamma=True, train_delta=True, pred_model='2layer',
                     set_seed=set_seed, opt_layer='nominal', perf_loss=perf_loss, 
-                    perf_period=perf_period, pred_loss_factor=pred_loss_factor).double()
+                    perf_period=perf_period, pred_loss_factor=pred_loss_factor)
     nom_net_2layer.net_cv(X, Y, lr_list, epoch_list, n_val=1)
     nom_net_2layer.net_roll_test(X, Y, n_roll=1)
-    with open(cache_path+'nom_net_2layer.pkl', 'wb') as outp:
-        pickle.dump(nom_net_2layer, outp, pickle.HIGHEST_PROTOCOL)
+    nom_net_2layer.save_model(cache_path+'nom_net_2layer.pkl')
     print('nom_net_2layer run complete')
 
     # DR E2E 2-layer
     dr_net_2layer = e2e.e2e_net(n_x, n_y, n_obs, prisk=prisk, train_pred=train_pred, 
                     train_gamma=True, train_delta=True, pred_model='2layer',
                     set_seed=set_seed, opt_layer=dr_layer, perf_loss=perf_loss, 
-                    perf_period=perf_period, pred_loss_factor=pred_loss_factor).double()
+                    perf_period=perf_period, pred_loss_factor=pred_loss_factor)
     dr_net_2layer.net_cv(X, Y, lr_list, epoch_list, n_val=1)
     dr_net_2layer.net_roll_test(X, Y, n_roll=1)
-    with open(cache_path+'dr_net_2layer.pkl', 'wb') as outp:
-        pickle.dump(dr_net_2layer, outp, pickle.HIGHEST_PROTOCOL)
+    dr_net_2layer.save_model(cache_path+'dr_net_2layer.pkl')
     print('dr_net_2layer run complete')
 
     #***********************************************************************************************
@@ -659,22 +682,20 @@ else:
     nom_net_3layer = e2e.e2e_net(n_x, n_y, n_obs, prisk=prisk, train_pred=train_pred, 
                     train_gamma=True, train_delta=True, pred_model='3layer',
                     set_seed=set_seed, opt_layer='nominal', perf_loss=perf_loss, 
-                    perf_period=perf_period, pred_loss_factor=pred_loss_factor).double()
+                    perf_period=perf_period, pred_loss_factor=pred_loss_factor)
     nom_net_3layer.net_cv(X, Y, lr_list, epoch_list, n_val=1)
     nom_net_3layer.net_roll_test(X, Y, n_roll=1)
-    with open(cache_path+'nom_net_3layer.pkl', 'wb') as outp:
-        pickle.dump(nom_net_3layer, outp, pickle.HIGHEST_PROTOCOL)
+    nom_net_3layer.save_model(cache_path+'nom_net_3layer.pkl')
     print('nom_net_3layer run complete')
 
     # DR E2E 3-layer
     dr_net_3layer = e2e.e2e_net(n_x, n_y, n_obs, prisk=prisk, train_pred=train_pred, 
                     train_gamma=True, train_delta=True, pred_model='3layer',
                     set_seed=set_seed, opt_layer=dr_layer, perf_loss=perf_loss, 
-                    perf_period=perf_period, pred_loss_factor=pred_loss_factor).double()
+                    perf_period=perf_period, pred_loss_factor=pred_loss_factor)
     dr_net_3layer.net_cv(X, Y, lr_list, epoch_list, n_val=1)
     dr_net_3layer.net_roll_test(X, Y, n_roll=1)
-    with open(cache_path+'dr_net_3layer.pkl', 'wb') as outp:
-        pickle.dump(dr_net_3layer, outp, pickle.HIGHEST_PROTOCOL)
+    dr_net_3layer.save_model(cache_path+'dr_net_3layer.pkl')
     print('dr_net_3layer run complete')
 
 #---------------------------------------------------------------------------------------------------
