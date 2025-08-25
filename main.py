@@ -68,6 +68,11 @@ n_y = 15   # Reduced from 20 (75% of original)
 # New: n_obs=120, n_y=15 (larger batches, reduced Python overhead)
 print(f"Data optimization: {n_obs} observations × {n_y} assets (larger batches for GPU efficiency)")
 
+# Load saved models (default is False)
+# use_cache = False
+use_cache = False  # Cache contains corrupted pandas objects - retrain all models
+# use_cache = True  # Try to load cached models first, fall back to training if needed
+
 # AlphaVantage API Key. 
 # Note: User API keys can be obtained for free from www.alphavantage.co. Users will need a free 
 # academic or paid license to download adjusted closing pricing data from AlphaVantage.
@@ -144,11 +149,6 @@ print(f"   • Data size: {n_obs}×{n_y} (larger batches for GPU efficiency)")
 print(f"   • Device: MPS (Apple Silicon GPU acceleration)")
 print(f"   • Threading: Optimized for M2 Pro/Max (10/12 cores)")
 print(f"   • CVXPY Solver: OSQP (better performance and stability than ECOS)")
-
-# Load saved models (default is False)
-# use_cache = False
-use_cache = False  # Cache contains corrupted pandas objects - retrain all models
-# use_cache = True  # Try to load cached models first, fall back to training if needed
 
 # Clear corrupted cache files if needed
 if not use_cache:
