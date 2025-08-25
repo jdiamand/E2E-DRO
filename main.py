@@ -74,7 +74,7 @@ print(f"Data optimization: {n_obs} observations × {n_y} assets (larger batches 
 AV_key = None
 
 # Historical data: Download data (or load cached data)
-X, Y = dl.AV(start, end, split, freq=freq, n_obs=n_obs, n_y=n_y, use_cache=True,
+X, Y = dl.AV(start, end, split, freq=freq, n_obs=n_obs, n_y=n_y, use_cache=use_cache,
             save_results=False, AV_key=AV_key)
 
 # Number of features and assets
