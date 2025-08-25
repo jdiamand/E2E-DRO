@@ -147,7 +147,22 @@ print(f"   • CVXPY Solver: OSQP (better performance and stability than ECOS)")
 
 # Load saved models (default is False)
 # use_cache = False
-use_cache = True  # Try to load cached models first, fall back to training if needed
+use_cache = False  # Cache contains corrupted pandas objects - retrain all models
+# use_cache = True  # Try to load cached models first, fall back to training if needed
+
+# Clear corrupted cache files if needed
+if not use_cache:
+    import os
+    import glob
+    print("🧹 Clearing corrupted cache files...")
+    cache_files = glob.glob(cache_path + "*.pkl")
+    for file in cache_files:
+        try:
+            os.remove(file)
+            print(f"   🗑️ Removed: {os.path.basename(file)}")
+        except Exception as e:
+            print(f"   ⚠️ Could not remove {os.path.basename(file)}: {e}")
+    print("   ✅ Cache cleared successfully")
 
 #---------------------------------------------------------------------------------------------------
 # Run 
