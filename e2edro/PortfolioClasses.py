@@ -36,8 +36,25 @@ class SlidingWindow(Dataset):
         observable)
         """
         # Handle both pandas DataFrames and numpy arrays
-        X_data = X.values if hasattr(X, 'values') else X
-        Y_data = Y.values if hasattr(Y, 'values') else Y
+        if hasattr(X, 'values'):
+            X_data = X.values
+        elif hasattr(X, 'to_numpy'):
+            X_data = X.to_numpy()
+        else:
+            X_data = X
+            
+        if hasattr(Y, 'values'):
+            Y_data = Y.values
+        elif hasattr(Y, 'to_numpy'):
+            Y_data = Y.to_numpy()
+        else:
+            Y_data = Y
+        
+        # Ensure we have numpy arrays
+        if not isinstance(X_data, np.ndarray):
+            X_data = np.array(X_data)
+        if not isinstance(Y_data, np.ndarray):
+            Y_data = np.array(Y_data)
         
         self.X = Variable(torch.tensor(X_data, dtype=torch.double))
         self.Y = Variable(torch.tensor(Y_data, dtype=torch.double))
