@@ -221,13 +221,35 @@ if use_cache:
     print(f"   • nom_net: {'✅ Loaded' if nom_net is not None else '❌ Failed'}")
     print(f"   • dr_net: {'✅ Loaded' if dr_net is not None else '❌ Failed'}")
     
-    # Check if we have enough models to proceed
-    if all([ew_net, po_net, base_net, nom_net, dr_net]):
-        print("🎉 All models loaded successfully from cache!")
-        print("   Proceeding with cached models...")
+    # Check which models we have and which we need to train
+    working_models = []
+    missing_models = []
+    
+    if ew_net: working_models.append('ew_net')
+    else: missing_models.append('ew_net')
+    
+    if po_net: working_models.append('po_net')
+    else: missing_models.append('po_net')
+    
+    if base_net: working_models.append('base_net')
+    else: missing_models.append('base_net')
+    
+    if nom_net: working_models.append('nom_net')
+    else: missing_models.append('nom_net')
+    
+    if dr_net: working_models.append('dr_net')
+    else: missing_models.append('dr_net')
+    
+    print(f"\n🎯 Model Status:")
+    print(f"   ✅ Working models: {', '.join(working_models)}")
+    print(f"   ❌ Missing models: {', '.join(missing_models)}")
+    
+    if len(working_models) >= 4:
+        print("🎉 Core models loaded successfully from cache!")
+        print("   Will train missing models and continue...")
     else:
-        print("⚠️ Some models failed to load from cache")
-        print("   Will need to train missing models...")
+        print("⚠️ Too many models failed to load from cache")
+        print("   Will need to train all models from scratch...")
         
     try:
         with open(cache_path+'dr_po_net.pkl', 'rb') as inp:
@@ -490,13 +512,25 @@ if use_cache:
     portfolios = ["base_net", "nom_net", "dr_net", "dr_net_learn_delta", "nom_net_learn_gamma",
                 "dr_net_learn_gamma", "nom_net_learn_theta", "dr_net_learn_theta"]
     
+    print("\n🔄 Merging extended models (if available)...")
     for portfolio in portfolios: 
-        cv_combo = pd.concat([eval(portfolio).cv_results, eval(portfolio+'_ext').cv_results], 
-                        ignore_index=True)
-        eval(portfolio).load_cv_results(cv_combo)
-        if eval(portfolio).epochs > 50:
-            exec(portfolio + '=' + portfolio+'_ext')
-            eval(portfolio).load_cv_results(cv_combo)
+        try:
+            # Check if both the main model and extended model exist
+            if eval(portfolio) is not None and eval(portfolio+'_ext') is not None:
+                print(f"   ✅ Merging {portfolio} with {portfolio}_ext")
+                cv_combo = pd.concat([eval(portfolio).cv_results, eval(portfolio+'_ext').cv_results], 
+                                ignore_index=True)
+                eval(portfolio).load_cv_results(cv_combo)
+                if eval(portfolio).epochs > 50:
+                    exec(portfolio + '=' + portfolio+'_ext')
+                    eval(portfolio).load_cv_results(cv_combo)
+            elif eval(portfolio) is not None:
+                print(f"   ⚠️ {portfolio} exists but {portfolio}_ext is missing")
+            else:
+                print(f"   ❌ {portfolio} is missing, skipping merge")
+        except Exception as e:
+            print(f"   ❌ Error merging {portfolio}: {e}")
+            continue
 
 ####################################################################################################
 # Numerical results
@@ -507,25 +541,82 @@ if use_cache:
 #---------------------------------------------------------------------------------------------------
 
 # Validation results table
-dr_net.cv_results = dr_net.cv_results.sort_values(['epochs', 'lr'], 
-                                                  ascending=[True, True]
-                                                  ).reset_index(drop=True)
-exp1_validation_table = pd.concat((base_net.cv_results.round(4), 
-                            nom_net.cv_results.val_loss.round(4), 
-                            dr_net.cv_results.val_loss.round(4)), axis=1)
-exp1_validation_table.set_axis(['eta', 'Epochs', 'Base', 'Nom.', 'DR'], 
-                        axis=1, inplace=True) 
+print("\n📊 Generating Experiment 1 results...")
+
+# Check which models we have for results generation
+models_available = []
+if base_net is not None: models_available.append('base_net')
+if nom_net is not None: models_available.append('nom_net')
+if dr_net is not None: models_available.append('dr_net')
+
+print(f"   Available models for results: {', '.join(models_available)}")
+
+if len(models_available) >= 2:
+    # Create validation table with available models
+    validation_data = []
+    if base_net is not None:
+        validation_data.append(base_net.cv_results.round(4))
+    if nom_net is not None:
+        validation_data.append(nom_net.cv_results.val_loss.round(4))
+    if dr_net is not None:
+        validation_data.append(dr_net.cv_results.val_loss.round(4))
+    
+    exp1_validation_table = pd.concat(validation_data, axis=1)
+    # Set column names based on available models
+    column_names = ['eta', 'Epochs']
+    if base_net is not None: column_names.append('Base')
+    if nom_net is not None: column_names.append('Nom.')
+    if dr_net is not None: column_names.append('DR')
+    exp1_validation_table.set_axis(column_names, axis=1, inplace=True)
+    print("   ✅ Validation table created successfully")
+else:
+    print("   ⚠️ Not enough models available for validation table")
+    exp1_validation_table = None 
 
 plt.rcParams['text.usetex'] = True
-portfolio_names = [r'EW', r'PO', r'Base', r'Nominal', r'DR']
-portfolios = [ew_net.portfolio,
-              po_net.portfolio,
-              base_net.portfolio,
-              nom_net.portfolio,
-              dr_net.portfolio]
+
+# Create portfolio lists with only available models
+portfolio_names = []
+portfolios = []
+
+if ew_net is not None and hasattr(ew_net, 'portfolio'):
+    portfolio_names.append(r'EW')
+    portfolios.append(ew_net.portfolio)
+    print("   ✅ Added EW portfolio")
+
+if po_net is not None and hasattr(po_net, 'portfolio'):
+    portfolio_names.append(r'PO')
+    portfolios.append(po_net.portfolio)
+    print("   ✅ Added PO portfolio")
+
+if base_net is not None and hasattr(base_net, 'portfolio'):
+    portfolio_names.append(r'Base')
+    portfolios.append(base_net.portfolio)
+    print("   ✅ Added Base portfolio")
+
+if nom_net is not None and hasattr(nom_net, 'portfolio'):
+    portfolio_names.append(r'Nominal')
+    portfolios.append(nom_net.portfolio)
+    print("   ✅ Added Nominal portfolio")
+
+if dr_net is not None and hasattr(dr_net, 'portfolio'):
+    portfolio_names.append(r'DR')
+    portfolios.append(dr_net.portfolio)
+    print("   ✅ Added DR portfolio")
+
+print(f"   📊 Total portfolios available: {len(portfolios)}")
 
 # Out-of-sample summary statistics table
-exp1_fin_table = pf.fin_table(portfolios, portfolio_names)
+if len(portfolios) >= 2:
+    try:
+        exp1_fin_table = pf.fin_table(portfolios, portfolio_names)
+        print("   ✅ Financial table generated successfully")
+    except Exception as e:
+        print(f"   ❌ Error generating financial table: {e}")
+        exp1_fin_table = None
+else:
+    print("   ⚠️ Not enough portfolios available for financial table")
+    exp1_fin_table = None
 
 # Wealth evolution plot
 portfolio_colors = ["dimgray", 
