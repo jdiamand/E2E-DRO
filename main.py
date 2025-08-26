@@ -78,9 +78,10 @@ use_cache = False  # Cache contains corrupted pandas objects - retrain all model
 # academic or paid license to download adjusted closing pricing data from AlphaVantage.
 AV_key = None
 
-# Historical data: Download data (or load cached data)
-X, Y = dl.AV(start, end, split, freq=freq, n_obs=n_obs, n_y=n_y, use_cache=use_cache,
-            save_results=False, AV_key=AV_key)
+# Historical data: Use synthetic data for testing (no API key required)
+print("🔬 Using synthetic data for testing...")
+X, Y = dl.synthetic_exp(n_x=n_x, n_y=n_y, n_obs=n_obs, n_tot=n_tot, split=split)
+print("✅ Synthetic data generated successfully")
 
 # Number of features and assets
 n_x, n_y = X.data.shape[1], Y.data.shape[1]
