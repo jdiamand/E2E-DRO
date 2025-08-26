@@ -43,6 +43,7 @@ class pred_then_opt(nn.Module):
         self.n_x = n_x
         self.n_y = n_y
         self.n_obs = n_obs
+        self.prisk = prisk
 
         # Register 'gamma' (risk-return trade-off parameter)
         # self.gamma = nn.Parameter(torch.FloatTensor(1).uniform_(0.037, 0.173))
