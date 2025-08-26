@@ -62,48 +62,31 @@ n_obs = 120  # Increased from 78 (1.5x larger batches, reduced Python overhead)
 # Number of assets (reduced for faster execution)
 n_y = 15   # Reduced from 20 (75% of original)
 
-# Number of features for synthetic data
-n_x = 10   # Number of input features
-
-# Total number of observations for synthetic data
-n_tot = 1200  # Total dataset size
-
 # Performance optimization: Larger batch sizes for better GPU utilization
 # Original: n_obs=104, n_y=20
 # Previous: n_obs=78, n_y=15 (75% of original size)
 # New: n_obs=120, n_y=15 (larger batches, reduced Python overhead)
 print(f"Data optimization: {n_obs} observations × {n_y} assets (larger batches for GPU efficiency)")
 
-# Load saved models (default is False)
-# use_cache = False
-use_cache = False  # Cache contains corrupted pandas objects - retrain all models
-# use_cache = True  # Try to load cached models first, fall back to training if needed
-
 # AlphaVantage API Key. 
 # Note: User API keys can be obtained for free from www.alphavantage.co. Users will need a free 
 # academic or paid license to download adjusted closing pricing data from AlphaVantage.
 AV_key = None
 
-# Historical data: Use synthetic data for testing (no API key required)
-print("🔬 Using synthetic data for testing...")
-X, Y = dl.synthetic_exp(n_x=n_x, n_y=n_y, n_obs=n_obs, n_tot=n_tot, split=split)
-print("✅ Synthetic data generated successfully")
+# Historical data: Download data (or load cached data)
+X, Y = dl.AV(start, end, split, freq=freq, n_obs=n_obs, n_y=n_y, use_cache=True,
+            save_results=False, AV_key=AV_key)
 
 # Number of features and assets
 n_x, n_y = X.data.shape[1], Y.data.shape[1]
 
 # Statistical significance analysis of features vs targets
-# Statistical significance analysis of features vs targets
-# Convert to numpy arrays to avoid pandas compatibility issues
 try:
-    # Ensure we have numpy arrays
-    X_np = X.data.values if hasattr(X.data, 'values') else X.data
-    Y_np = Y.data.values if hasattr(Y.data, 'values') else Y.data
-    stats = dl.statanalysis(X_np, Y_np)
+    stats = dl.statanalysis(X.data, Y.data)
     print("✅ Statistical analysis completed successfully")
 except Exception as e:
     print(f"⚠️ Statistical analysis failed: {e}")
-    print("   Continuing without statistical analysis...")
+    print("🔧 Continuing without statistical analysis...")
     stats = None
 
 ####################################################################################################
@@ -157,176 +140,63 @@ print(f"   • Device: MPS (Apple Silicon GPU acceleration)")
 print(f"   • Threading: Optimized for M2 Pro/Max (10/12 cores)")
 print(f"   • CVXPY Solver: OSQP (better performance and stability than ECOS)")
 
-# Clear corrupted cache files if needed
-if not use_cache:
-    import os
-    import glob
-    print("🧹 Clearing corrupted cache files...")
-    cache_files = glob.glob(cache_path + "*.pkl")
-    for file in cache_files:
-        try:
-            os.remove(file)
-            print(f"   🗑️ Removed: {os.path.basename(file)}")
-        except Exception as e:
-            print(f"   ⚠️ Could not remove {os.path.basename(file)}: {e}")
-    print("   ✅ Cache cleared successfully")
+# Load saved models (default is False)
+# use_cache = False
+use_cache = False  # Retrain models from scratch due to pandas compatibility issues
 
 #---------------------------------------------------------------------------------------------------
 # Run 
 #---------------------------------------------------------------------------------------------------
 
 if use_cache:
-    print("🔄 Attempting to load cached models...")
     # Load cached models and backtest results
-    try:
-        with open(cache_path+'ew_net.pkl', 'rb') as inp:
-            ew_net = pickle.load(inp)
-            print("✅ ew_net loaded from cache")
-    except Exception as e:
-        print(f"❌ Failed to load ew_net: {e}")
-        ew_net = None
-        
-    try:
-        with open(cache_path+'po_net.pkl', 'rb') as inp:
-            po_net = pickle.load(inp)
-            print("✅ po_net loaded from cache")
-    except Exception as e:
-        print(f"❌ Failed to load po_net: {e}")
-        po_net = None
+    with open(cache_path+'ew_net.pkl', 'rb') as inp:
+        ew_net = pickle.load(inp)
+    with open(cache_path+'po_net.pkl', 'rb') as inp:
+        po_net = pickle.load(inp)
     # Load base model
     try:
         with open(cache_path+'base_net.pkl', 'rb') as inp:
             base_net = pickle.load(inp)
-            print("✅ base_net loaded from cache")
             # Check if it's our new format and recreate cvxpylayers if needed
             if hasattr(base_net, 'base_layer') and base_net.base_layer is None:
-                print("   🔄 Recreating cvxpylayers for base_net...")
                 base_net.load_model(cache_path+'base_net.pkl')
-                print("   ✅ cvxpylayers recreated successfully")
-    except Exception as e:
-        print(f"❌ Failed to load base_net: {e}")
+    except:
         base_net = None
         
     # Load nominal model
     try:
         with open(cache_path+'nom_net.pkl', 'rb') as inp:
             nom_net = pickle.load(inp)
-            print("✅ nom_net loaded from cache")
             # Check if it's our new format and recreate cvxpylayers if needed
             if hasattr(nom_net, 'nom_layer') and nom_net.nom_layer is None:
-                print("   🔄 Recreating cvxpylayers for nom_net...")
                 nom_net.load_model(cache_path+'nom_net.pkl')
-                print("   ✅ cvxpylayers recreated successfully")
-    except Exception as e:
-        print(f"❌ Failed to load nom_net: {e}")
+    except:
         nom_net = None
         
     # Load DR model
     try:
         with open(cache_path+'dr_net.pkl', 'rb') as inp:
             dr_net = pickle.load(inp)
-            print("✅ dr_net loaded from cache")
             # Check if it's our new format and recreate cvxpylayers if needed
             if hasattr(dr_net, 'dro_layer') and dr_net.dro_layer is None:
-                print("   🔄 Recreating cvxpylayers for dr_net...")
                 dr_net.load_model(cache_path+'dr_net.pkl')
-                print("   ✅ cvxpylayers recreated successfully")
-    except Exception as e:
-        print(f"❌ Failed to load dr_net: {e}")
+    except:
         dr_net = None
-        
-    # Summary of cache loading
-    print("\n📊 Cache Loading Summary:")
-    print(f"   • ew_net: {'✅ Loaded' if ew_net is not None else '❌ Failed'}")
-    print(f"   • po_net: {'✅ Loaded' if po_net is not None else '❌ Failed'}")
-    print(f"   • base_net: {'✅ Loaded' if base_net is not None else '❌ Failed'}")
-    print(f"   • nom_net: {'✅ Loaded' if nom_net is not None else '❌ Failed'}")
-    print(f"   • dr_net: {'✅ Loaded' if dr_net is not None else '❌ Failed'}")
-    
-    # Check which models we have and which we need to train
-    working_models = []
-    missing_models = []
-    
-    if ew_net: working_models.append('ew_net')
-    else: missing_models.append('ew_net')
-    
-    if po_net: working_models.append('po_net')
-    else: missing_models.append('po_net')
-    
-    if base_net: working_models.append('base_net')
-    else: missing_models.append('base_net')
-    
-    if nom_net: working_models.append('nom_net')
-    else: missing_models.append('nom_net')
-    
-    if dr_net: working_models.append('dr_net')
-    else: missing_models.append('dr_net')
-    
-    print(f"\n🎯 Model Status:")
-    print(f"   ✅ Working models: {', '.join(working_models)}")
-    print(f"   ❌ Missing models: {', '.join(missing_models)}")
-    
-    if len(working_models) >= 4:
-        print("🎉 Core models loaded successfully from cache!")
-        print("   Will train missing models and continue...")
-    else:
-        print("⚠️ Too many models failed to load from cache")
-        print("   Will need to train all models from scratch...")
-        
-    try:
-        with open(cache_path+'dr_po_net.pkl', 'rb') as inp:
-            dr_po_net = pickle.load(inp)
-            print("✅ dr_po_net loaded from cache")
-    except Exception as e:
-        print(f"❌ Failed to load dr_po_net: {e}")
-        dr_po_net = None
-    try:
-        with open(cache_path+'dr_net_learn_delta.pkl', 'rb') as inp:
-            dr_net_learn_delta = pickle.load(inp)
-            print("✅ dr_net_learn_delta loaded from cache")
-    except Exception as e:
-        print(f"❌ Failed to load dr_net_learn_delta: {e}")
-        dr_net_learn_delta = None
-        
-    try:
-        with open(cache_path+'nom_net_learn_gamma.pkl', 'rb') as inp:
-            nom_net_learn_gamma = pickle.load(inp)
-            print("✅ nom_net_learn_gamma loaded from cache")
-    except Exception as e:
-        print(f"❌ Failed to load nom_net_learn_gamma: {e}")
-        nom_net_learn_gamma = None
-        
-    try:
-        with open(cache_path+'dr_net_learn_gamma.pkl', 'rb') as inp:
-            dr_net_learn_gamma = pickle.load(inp)
-            print("✅ dr_net_learn_gamma loaded from cache")
-    except Exception as e:
-        print(f"❌ Failed to load dr_net_learn_gamma: {e}")
-        dr_net_learn_gamma = None
-        
-    try:
-        with open(cache_path+'dr_net_learn_gamma_delta.pkl', 'rb') as inp:
-            dr_net_learn_gamma_delta = pickle.load(inp)
-            print("✅ dr_net_learn_gamma_delta loaded from cache")
-    except Exception as e:
-        print(f"❌ Failed to load dr_net_learn_gamma_delta: {e}")
-        dr_net_learn_gamma_delta = None
-        
-    try:
-        with open(cache_path+'nom_net_learn_theta.pkl', 'rb') as inp:
-            nom_net_learn_theta = pickle.load(inp)
-            print("✅ nom_net_learn_theta loaded from cache")
-    except Exception as e:
-        print(f"❌ Failed to load nom_net_learn_theta: {e}")
-        nom_net_learn_theta = None
-        
-    try:
-        with open(cache_path+'dr_net_learn_theta.pkl', 'rb') as inp:
-            dr_net_learn_theta = pickle.load(inp)
-            print("✅ dr_net_learn_theta loaded from cache")
-    except Exception as e:
-        print(f"❌ Failed to load dr_net_learn_theta: {e}")
-        dr_net_learn_theta = None
+    with open(cache_path+'dr_po_net.pkl', 'rb') as inp:
+        dr_po_net = pickle.load(inp)
+    with open(cache_path+'dr_net_learn_delta.pkl', 'rb') as inp:
+        dr_net_learn_delta = pickle.load(inp)
+    with open(cache_path+'nom_net_learn_gamma.pkl', 'rb') as inp:
+        nom_net_learn_gamma = pickle.load(inp)
+    with open(cache_path+'dr_net_learn_gamma.pkl', 'rb') as inp:
+        dr_net_learn_gamma = pickle.load(inp)
+    with open(cache_path+'dr_net_learn_gamma_delta.pkl', 'rb') as inp:
+        dr_net_learn_gamma_delta = pickle.load(inp)
+    with open(cache_path+'nom_net_learn_theta.pkl', 'rb') as inp:
+        nom_net_learn_theta = pickle.load(inp)
+    with open(cache_path+'dr_net_learn_theta.pkl', 'rb') as inp:
+        dr_net_learn_theta = pickle.load(inp)
 
     # Load extended models with error handling
     try:
@@ -346,77 +216,25 @@ if use_cache:
             dr_net_ext = pickle.load(inp)
     except:
         dr_net_ext = None
-    try:
-        with open(cache_path+'dr_net_learn_delta_ext.pkl', 'rb') as inp:
-            dr_net_learn_delta_ext = pickle.load(inp)
-            print("✅ dr_net_learn_delta_ext loaded from cache")
-    except Exception as e:
-        print(f"❌ Failed to load dr_net_learn_delta_ext: {e}")
-        dr_net_learn_delta_ext = None
-        
-    try:
-        with open(cache_path+'nom_net_learn_gamma_ext.pkl', 'rb') as inp:
-            nom_net_learn_gamma_ext = pickle.load(inp)
-            print("✅ nom_net_learn_gamma_ext loaded from cache")
-    except Exception as e:
-        print(f"❌ Failed to load nom_net_learn_gamma_ext: {e}")
-        nom_net_learn_gamma_ext = None
-        
-    try:
-        with open(cache_path+'dr_net_learn_gamma_ext.pkl', 'rb') as inp:
-            dr_net_learn_gamma_ext = pickle.load(inp)
-            print("✅ dr_net_learn_gamma_ext loaded from cache")
-    except Exception as e:
-        print(f"❌ Failed to load dr_net_learn_gamma_ext: {e}")
-        dr_net_learn_gamma_ext = None
-        
-    try:
-        with open(cache_path+'nom_net_learn_theta_ext.pkl', 'rb') as inp:
-            nom_net_learn_theta_ext = pickle.load(inp)
-            print("✅ nom_net_learn_theta_ext loaded from cache")
-    except Exception as e:
-        print(f"❌ Failed to load nom_net_learn_theta_ext: {e}")
-        nom_net_learn_theta_ext = None
-        
-    try:
-        with open(cache_path+'dr_net_learn_theta_ext.pkl', 'rb') as inp:
-            dr_net_learn_theta_ext = pickle.load(inp)
-            print("✅ dr_net_learn_theta_ext loaded from cache")
-    except Exception as e:
-        print(f"❌ Failed to load dr_net_learn_theta_ext: {e}")
-        dr_net_learn_theta_ext = None
+    with open(cache_path+'dr_net_learn_delta_ext.pkl', 'rb') as inp:
+        dr_net_learn_delta_ext = pickle.load(inp)
+    with open(cache_path+'nom_net_learn_gamma_ext.pkl', 'rb') as inp:
+        nom_net_learn_gamma_ext = pickle.load(inp)
+    with open(cache_path+'dr_net_learn_gamma_ext.pkl', 'rb') as inp:
+        dr_net_learn_gamma_ext = pickle.load(inp)
+    with open(cache_path+'nom_net_learn_theta_ext.pkl', 'rb') as inp:
+        nom_net_learn_theta_ext = pickle.load(inp)
+    with open(cache_path+'dr_net_learn_theta_ext.pkl', 'rb') as inp:
+        dr_net_learn_theta_ext = pickle.load(inp)
 
-    try:
-        with open(cache_path+'dr_net_tv.pkl', 'rb') as inp:
-            dr_net_tv = pickle.load(inp)
-            print("✅ dr_net_tv loaded from cache")
-    except Exception as e:
-        print(f"❌ Failed to load dr_net_tv: {e}")
-        dr_net_tv = None
-        
-    try:
-        with open(cache_path+'dr_net_tv_learn_delta.pkl', 'rb') as inp:
-            dr_net_tv_learn_delta = pickle.load(inp)
-            print("✅ dr_net_tv_learn_delta loaded from cache")
-    except Exception as e:
-        print(f"❌ Failed to load dr_net_tv_learn_delta: {e}")
-        dr_net_tv_learn_delta = None
-        
-    try:
-        with open(cache_path+'dr_net_tv_learn_gamma.pkl', 'rb') as inp:
-            dr_net_tv_learn_gamma = pickle.load(inp)
-            print("✅ dr_net_tv_learn_gamma loaded from cache")
-    except Exception as e:
-        print(f"❌ Failed to load dr_net_tv_learn_gamma: {e}")
-        dr_net_tv_learn_gamma = None
-        
-    try:
-        with open(cache_path+'dr_net_tv_learn_theta.pkl', 'rb') as inp:
-            dr_net_tv_learn_theta = pickle.load(inp)
-            print("✅ dr_net_tv_learn_theta loaded from cache")
-    except Exception as e:
-        print(f"❌ Failed to load dr_net_tv_learn_theta: {e}")
-        dr_net_tv_learn_theta = None
+    with open(cache_path+'dr_net_tv.pkl', 'rb') as inp:
+        dr_net_tv = pickle.load(inp)
+    with open(cache_path+'dr_net_tv_learn_delta.pkl', 'rb') as inp:
+        dr_net_tv_learn_delta = pickle.load(inp)
+    with open(cache_path+'dr_net_tv_learn_gamma.pkl', 'rb') as inp:
+        dr_net_tv_learn_gamma = pickle.load(inp)
+    with open(cache_path+'dr_net_tv_learn_theta.pkl', 'rb') as inp:
+        dr_net_tv_learn_theta = pickle.load(inp)
 else:
     # Exp 1: Equal weight portfolio
     ew_net = bm.equal_weight(n_x, n_y, n_obs)
@@ -534,25 +352,13 @@ if use_cache:
     portfolios = ["base_net", "nom_net", "dr_net", "dr_net_learn_delta", "nom_net_learn_gamma",
                 "dr_net_learn_gamma", "nom_net_learn_theta", "dr_net_learn_theta"]
     
-    print("\n🔄 Merging extended models (if available)...")
     for portfolio in portfolios: 
-        try:
-            # Check if both the main model and extended model exist
-            if eval(portfolio) is not None and eval(portfolio+'_ext') is not None:
-                print(f"   ✅ Merging {portfolio} with {portfolio}_ext")
-                cv_combo = pd.concat([eval(portfolio).cv_results, eval(portfolio+'_ext').cv_results], 
-                                ignore_index=True)
-                eval(portfolio).load_cv_results(cv_combo)
-                if eval(portfolio).epochs > 50:
-                    exec(portfolio + '=' + portfolio+'_ext')
-                    eval(portfolio).load_cv_results(cv_combo)
-            elif eval(portfolio) is not None:
-                print(f"   ⚠️ {portfolio} exists but {portfolio}_ext is missing")
-            else:
-                print(f"   ❌ {portfolio} is missing, skipping merge")
-        except Exception as e:
-            print(f"   ❌ Error merging {portfolio}: {e}")
-            continue
+        cv_combo = pd.concat([eval(portfolio).cv_results, eval(portfolio+'_ext').cv_results], 
+                        ignore_index=True)
+        eval(portfolio).load_cv_results(cv_combo)
+        if eval(portfolio).epochs > 50:
+            exec(portfolio + '=' + portfolio+'_ext')
+            eval(portfolio).load_cv_results(cv_combo)
 
 ####################################################################################################
 # Numerical results
@@ -563,82 +369,25 @@ if use_cache:
 #---------------------------------------------------------------------------------------------------
 
 # Validation results table
-print("\n📊 Generating Experiment 1 results...")
-
-# Check which models we have for results generation
-models_available = []
-if base_net is not None: models_available.append('base_net')
-if nom_net is not None: models_available.append('nom_net')
-if dr_net is not None: models_available.append('dr_net')
-
-print(f"   Available models for results: {', '.join(models_available)}")
-
-if len(models_available) >= 2:
-    # Create validation table with available models
-    validation_data = []
-    if base_net is not None:
-        validation_data.append(base_net.cv_results.round(4))
-    if nom_net is not None:
-        validation_data.append(nom_net.cv_results.val_loss.round(4))
-    if dr_net is not None:
-        validation_data.append(dr_net.cv_results.val_loss.round(4))
-    
-    exp1_validation_table = pd.concat(validation_data, axis=1)
-    # Set column names based on available models
-    column_names = ['eta', 'Epochs']
-    if base_net is not None: column_names.append('Base')
-    if nom_net is not None: column_names.append('Nom.')
-    if dr_net is not None: column_names.append('DR')
-    exp1_validation_table.set_axis(column_names, axis=1, inplace=True)
-    print("   ✅ Validation table created successfully")
-else:
-    print("   ⚠️ Not enough models available for validation table")
-    exp1_validation_table = None 
+dr_net.cv_results = dr_net.cv_results.sort_values(['epochs', 'lr'], 
+                                                  ascending=[True, True]
+                                                  ).reset_index(drop=True)
+exp1_validation_table = pd.concat((base_net.cv_results.round(4), 
+                            nom_net.cv_results.val_loss.round(4), 
+                            dr_net.cv_results.val_loss.round(4)), axis=1)
+exp1_validation_table.set_axis(['eta', 'Epochs', 'Base', 'Nom.', 'DR'], 
+                        axis=1, inplace=True) 
 
 plt.rcParams['text.usetex'] = True
-
-# Create portfolio lists with only available models
-portfolio_names = []
-portfolios = []
-
-if ew_net is not None and hasattr(ew_net, 'portfolio'):
-    portfolio_names.append(r'EW')
-    portfolios.append(ew_net.portfolio)
-    print("   ✅ Added EW portfolio")
-
-if po_net is not None and hasattr(po_net, 'portfolio'):
-    portfolio_names.append(r'PO')
-    portfolios.append(po_net.portfolio)
-    print("   ✅ Added PO portfolio")
-
-if base_net is not None and hasattr(base_net, 'portfolio'):
-    portfolio_names.append(r'Base')
-    portfolios.append(base_net.portfolio)
-    print("   ✅ Added Base portfolio")
-
-if nom_net is not None and hasattr(nom_net, 'portfolio'):
-    portfolio_names.append(r'Nominal')
-    portfolios.append(nom_net.portfolio)
-    print("   ✅ Added Nominal portfolio")
-
-if dr_net is not None and hasattr(dr_net, 'portfolio'):
-    portfolio_names.append(r'DR')
-    portfolios.append(dr_net.portfolio)
-    print("   ✅ Added DR portfolio")
-
-print(f"   📊 Total portfolios available: {len(portfolios)}")
+portfolio_names = [r'EW', r'PO', r'Base', r'Nominal', r'DR']
+portfolios = [ew_net.portfolio,
+              po_net.portfolio,
+              base_net.portfolio,
+              nom_net.portfolio,
+              dr_net.portfolio]
 
 # Out-of-sample summary statistics table
-if len(portfolios) >= 2:
-    try:
-        exp1_fin_table = pf.fin_table(portfolios, portfolio_names)
-        print("   ✅ Financial table generated successfully")
-    except Exception as e:
-        print(f"   ❌ Error generating financial table: {e}")
-        exp1_fin_table = None
-else:
-    print("   ⚠️ Not enough portfolios available for financial table")
-    exp1_fin_table = None
+exp1_fin_table = pf.fin_table(portfolios, portfolio_names)
 
 # Wealth evolution plot
 portfolio_colors = ["dimgray", 
