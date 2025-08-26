@@ -103,14 +103,9 @@ class backtest:
         self.vol = np.std(self.rets)
         self.sharpe = self.mean / self.vol
         
-        # Handle both date indices and numeric indices
-        try:
-            self.rets = pd.DataFrame({'Date':self.dates, 'rets': self.rets, 'tri': tri})
-            self.rets = self.rets.set_index('Date')
-        except Exception as e:
-            # Fallback for numeric indices - create simple DataFrame
-            self.rets = pd.DataFrame({'Period':self.dates, 'rets': self.rets, 'tri': tri})
-            self.rets = self.rets.set_index('Period')
+        # Store results as numpy arrays to avoid pandas corruption
+        self.rets_array = np.column_stack([self.dates, self.rets, tri])
+        self.rets = self.rets_array  # Store as numpy array instead of pandas DataFrame
 
 ####################################################################################################
 # InSample object to store in-sample results
