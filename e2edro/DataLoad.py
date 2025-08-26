@@ -20,25 +20,20 @@ class TrainTest:
         """Object to hold the training, validation and testing datasets
 
         Inputs
-        data: numpy array or pandas dataframe with time series data
+        data: pandas dataframe with time series data
         n_obs: Number of observations per batch
         split: list of ratios that control the partition of data into training, testing and 
         validation sets. 
     
         Output. TrainTest object with fields and functions:
-        data: Field. Holds the original data (numpy array or pandas dataframe)
-        train(): Function. Returns the training subset of observations
+        data: Field. Holds the original pandas dataframe
+        train(): Function. Returns a pandas dataframe with the training subset of observations
         """
         self.data = data
         self.n_obs = n_obs
         self.split = split
 
-        # Handle both numpy arrays and pandas dataframes
-        if hasattr(self.data, 'shape'):
-            n_obs_tot = self.data.shape[0]
-        else:
-            n_obs_tot = len(self.data)
-            
+        n_obs_tot = self.data.shape[0]
         numel = n_obs_tot * np.cumsum(split)
         self.numel = [round(i) for i in numel]
 
@@ -257,9 +252,9 @@ def synthetic_exp(n_x=5, n_y=10, n_tot=1200, n_obs=104, split=[0.6, 0.4], set_se
     # Synthetic outputs
     Y = (alpha + X @ beta + exp_noise + gauss_noise).clip(-0.2,0.3) / 15
 
-    # Keep as numpy arrays to avoid pandas corruption issues
-    # X = pd.DataFrame(X)  # Commented out due to pandas corruption
-    # Y = pd.DataFrame(Y)  # Commented out due to pandas corruption
+    # Convert to dataframes
+    X = pd.DataFrame(X)
+    Y = pd.DataFrame(Y)
     
     # Partition dataset into training and testing sets
     return TrainTest(X, n_obs, split), TrainTest(Y, n_obs, split)
@@ -364,15 +359,15 @@ def AV(start:str, end:str, split:list, freq:str='weekly', n_obs:int=104, n_y=Non
 ####################################################################################################
 # stats function
 ####################################################################################################
-def statanalysis(X:pd.DataFrame, Y:pd.DataFrame) -> pd.DataFrame:
+def statanalysis(X, Y) -> pd.DataFrame:
     """Conduct a pairwise statistical significance analysis of each feature in X against each asset
     in Y. 
 
     Parameters
     ----------
-    X : pd.DataFrame
+    X : pd.DataFrame or numpy.ndarray
         Timeseries of features.
-    Y : pd.DataFrame
+    Y : pd.DataFrame or numpy.ndarray
         Timeseries of asset returns.
 
     Returns
@@ -383,11 +378,30 @@ def statanalysis(X:pd.DataFrame, Y:pd.DataFrame) -> pd.DataFrame:
 
     """
     
-    stats = pd.DataFrame(columns=X.columns, index=Y.columns)
-    for ticker in Y.columns:
-        for feature in X.columns:
-            stats.loc[ticker, feature] = sm.OLS(Y[ticker].values, 
-                                                sm.add_constant(X[feature]).values
+    # Handle both pandas DataFrames and numpy arrays
+    if hasattr(X, 'columns'):
+        # X is a pandas DataFrame
+        X_cols = X.columns
+        X_data = X
+    else:
+        # X is a numpy array - create column names
+        X_cols = [f'Feature_{i}' for i in range(X.shape[1])]
+        X_data = pd.DataFrame(X, columns=X_cols)
+    
+    if hasattr(Y, 'columns'):
+        # Y is a pandas DataFrame
+        Y_cols = Y.columns
+        Y_data = Y
+    else:
+        # Y is a numpy array - create column names
+        Y_cols = [f'Asset_{i}' for i in range(Y.shape[1])]
+        Y_data = pd.DataFrame(Y, columns=Y_cols)
+    
+    stats = pd.DataFrame(columns=X_cols, index=Y_cols)
+    for ticker in Y_cols:
+        for feature in X_cols:
+            stats.loc[ticker, feature] = sm.OLS(Y_data[ticker].values, 
+                                                sm.add_constant(X_data[feature]).values
                                                 ).fit().pvalues[1]
             
     return stats.astype(float).round(2)
