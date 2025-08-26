@@ -67,7 +67,7 @@ class pred_then_opt(nn.Module):
             self.model_type = 'dro'
 
         # LAYER: OLS linear prediction
-        self.pred_layer = nn.Linear(n_x, n_y)
+        self.pred_layer = nn.Linear(n_x, n_y).double()
         self.pred_layer.weight.requires_grad = False
         self.pred_layer.bias.requires_grad = False
         
