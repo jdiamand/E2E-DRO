@@ -132,7 +132,9 @@ class pred_then_opt(nn.Module):
     #-----------------------------------------------------------------------------------------------
     def _solve_cvxpy_base(self, y_hat, solver_args):
         """Solve base optimization problem using CVXPY directly"""
-        problem, z, y_hat_param = e2e.base_mod(self.n_y, self.n_obs, self.prisk)
+        # Convert string to actual risk function
+        risk_func = eval('rf.' + self.prisk)
+        problem, z, y_hat_param = e2e.base_mod(self.n_y, self.n_obs, risk_func)
         
         # Set parameter values
         y_hat_param.value = y_hat.detach().cpu().numpy()
@@ -158,7 +160,9 @@ class pred_then_opt(nn.Module):
 
     def _solve_cvxpy_nominal(self, ep, y_hat, gamma, solver_args):
         """Solve nominal optimization problem using CVXPY directly"""
-        problem, z, y_hat_param = e2e.nominal(self.n_y, self.n_obs, self.prisk)
+        # Convert string to actual risk function
+        risk_func = eval('rf.' + self.prisk)
+        problem, z, y_hat_param = e2e.nominal(self.n_y, self.n_obs, risk_func)
         
         # Set parameter values
         y_hat_param.value = y_hat.detach().cpu().numpy()
@@ -184,7 +188,9 @@ class pred_then_opt(nn.Module):
 
     def _solve_cvxpy_dro(self, ep, y_hat, gamma, delta, solver_args):
         """Solve distributionally robust optimization problem using CVXPY directly"""
-        problem, z, y_hat_param = e2e.hellinger(self.n_y, self.n_obs, self.prisk)
+        # Convert string to actual risk function
+        risk_func = eval('rf.' + self.prisk)
+        problem, z, y_hat_param = e2e.hellinger(self.n_y, self.n_obs, risk_func)
         
         # Set parameter values
         y_hat_param.value = y_hat.detach().cpu().numpy()
