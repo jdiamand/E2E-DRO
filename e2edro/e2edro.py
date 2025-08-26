@@ -135,7 +135,7 @@ def nominal(n_y, n_obs, prisk):
     # Construct optimization problem
     problem = cp.Problem(objective, constraints)
 
-    return problem, z, y_hat
+    return problem, z, y_hat, ep, gamma
 
 #---------------------------------------------------------------------------------------------------
 # Total Variation: sum_t abs(p_t - q_t) <= delta
@@ -274,7 +274,7 @@ def hellinger(n_y, n_obs, prisk):
     # Construct optimization problem
     problem = cp.Problem(objective, constraints)
     
-    return problem, z, y_hat
+    return problem, z, y_hat, ep, gamma, delta
 
 ####################################################################################################
 # E2E neural network module

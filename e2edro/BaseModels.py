@@ -162,10 +162,12 @@ class pred_then_opt(nn.Module):
         """Solve nominal optimization problem using CVXPY directly"""
         # Convert string to actual risk function
         risk_func = eval('rf.' + self.prisk)
-        problem, z, y_hat_param = e2e.nominal(self.n_y, self.n_obs, risk_func)
+        problem, z, y_hat_param, ep_param, gamma_param = e2e.nominal(self.n_y, self.n_obs, risk_func)
         
         # Set parameter values
         y_hat_param.value = y_hat.detach().cpu().numpy()
+        ep_param.value = ep.detach().cpu().numpy()
+        gamma_param.value = gamma.item()
         
         # Solve the problem
         try:
@@ -190,10 +192,13 @@ class pred_then_opt(nn.Module):
         """Solve distributionally robust optimization problem using CVXPY directly"""
         # Convert string to actual risk function
         risk_func = eval('rf.' + self.prisk)
-        problem, z, y_hat_param = e2e.hellinger(self.n_y, self.n_obs, risk_func)
+        problem, z, y_hat_param, ep_param, gamma_param, delta_param = e2e.hellinger(self.n_y, self.n_obs, risk_func)
         
         # Set parameter values
         y_hat_param.value = y_hat.detach().cpu().numpy()
+        ep_param.value = ep.detach().cpu().numpy()
+        gamma_param.value = gamma.item()
+        delta_param.value = delta.item()
         
         # Solve the problem
         try:
