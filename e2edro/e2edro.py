@@ -815,18 +815,18 @@ class e2e_net(nn.Module):
         try:
             self.base_problem.solve(**solver_args)
             if self.base_problem.status == 'optimal':
-                z_star = torch.tensor(self.base_z.value, dtype=torch.float32, device=y_hat.device)
+                z_star = torch.tensor(self.base_z.value, dtype=torch.double, device=y_hat.device)
                 return z_star
             else:
                 # Fallback to ECOS if OSQP fails
                 fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
                 self.base_problem.solve(**fallback_args)
-                z_star = torch.tensor(self.base_z.value, dtype=torch.float32, device=y_hat.device)
+                z_star = torch.tensor(self.base_z.value, dtype=torch.double, device=y_hat.device)
                 return z_star
         except Exception as e:
             print(f"CVXPY solve failed: {e}, using equal weights fallback")
             # Return equal weights when optimization fails
-            z_star = torch.ones(self.n_y, dtype=torch.float32, device=y_hat.device) / self.n_y
+            z_star = torch.ones(self.n_y, dtype=torch.double, device=y_hat.device) / self.n_y
             return z_star
 
     def _solve_cvxpy_nominal(self, ep, y_hat, gamma, solver_args):
@@ -840,18 +840,18 @@ class e2e_net(nn.Module):
         try:
             self.nom_problem.solve(**solver_args)
             if self.nom_problem.status == 'optimal':
-                z_star = torch.tensor(self.nom_z.value, dtype=torch.float32, device=y_hat.device)
+                z_star = torch.tensor(self.nom_z.value, dtype=torch.double, device=y_hat.device)
                 return z_star
             else:
                 # Fallback to ECOS if OSQP fails
                 fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
                 self.nom_problem.solve(**fallback_args)
-                z_star = torch.tensor(self.nom_z.value, dtype=torch.float32, device=y_hat.device)
+                z_star = torch.tensor(self.nom_z.value, dtype=torch.double, device=y_hat.device)
                 return z_star
         except Exception as e:
             print(f"CVXPY solve failed: {e}, using equal weights fallback")
             # Return equal weights when optimization fails
-            z_star = torch.ones(self.n_y, dtype=torch.float32, device=y_hat.device) / self.n_y
+            z_star = torch.ones(self.n_y, dtype=torch.double, device=y_hat.device) / self.n_y
             return z_star
 
     def _solve_cvxpy_dro(self, ep, y_hat, gamma, delta, solver_args):
@@ -866,18 +866,18 @@ class e2e_net(nn.Module):
         try:
             self.dro_problem.solve(**solver_args)
             if self.dro_problem.status == 'optimal':
-                z_star = torch.tensor(self.dro_z.value, dtype=torch.float32, device=y_hat.device)
+                z_star = torch.tensor(self.dro_z.value, dtype=torch.double, device=y_hat.device)
                 return z_star
             else:
                 # Fallback to ECOS if OSQP fails
                 fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
                 self.dro_problem.solve(**fallback_args)
-                z_star = torch.tensor(self.dro_z.value, dtype=torch.float32, device=y_hat.device)
+                z_star = torch.tensor(self.dro_z.value, dtype=torch.double, device=y_hat.device)
                 return z_star
         except Exception as e:
             print(f"CVXPY solve failed: {e}, using equal weights fallback")
             # Return equal weights when optimization fails
-            z_star = torch.ones(self.n_y, dtype=torch.float32, device=y_hat.device) / self.n_y
+            z_star = torch.ones(self.n_y, dtype=torch.double, device=y_hat.device) / self.n_y
             return z_star
 
     #-----------------------------------------------------------------------------------------------
