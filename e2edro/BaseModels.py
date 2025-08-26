@@ -317,7 +317,16 @@ class equal_weight:
         """
 
         # Declare backtest object to hold the test results
-        portfolio = pc.backtest(len(Y.test())-Y.n_obs, self.n_y, Y.test().index[Y.n_obs:])
+        # Create simple numeric indices for numpy arrays
+        test_data = Y.test()
+        if hasattr(test_data, 'index'):
+            # Pandas DataFrame - use existing index
+            dates = test_data.index[Y.n_obs:]
+        else:
+            # Numpy array - create simple numeric indices
+            dates = range(Y.n_obs, len(test_data))
+            
+        portfolio = pc.backtest(len(Y.test())-Y.n_obs, self.n_y, dates)
 
         test_set = DataLoader(pc.SlidingWindow(X.test(), Y.test(), self.n_obs, 0))
 
