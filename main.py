@@ -62,6 +62,12 @@ n_obs = 120  # Increased from 78 (1.5x larger batches, reduced Python overhead)
 # Number of assets (reduced for faster execution)
 n_y = 15   # Reduced from 20 (75% of original)
 
+# Number of features for synthetic data
+n_x = 10   # Number of input features
+
+# Total number of observations for synthetic data
+n_tot = 1200  # Total dataset size
+
 # Performance optimization: Larger batch sizes for better GPU utilization
 # Original: n_obs=104, n_y=20
 # Previous: n_obs=78, n_y=15 (75% of original size)
