@@ -256,10 +256,19 @@ class pred_then_opt(nn.Module):
             test_set = DataLoader(pc.SlidingWindow(X.test(), Y.test(), self.n_obs, 0))
 
             X_train, Y_train = X.train(), Y.train()
-            X_train.insert(0,'ones', 1.0)
-
-            X_train = Variable(torch.tensor(X_train.values, dtype=torch.double))
-            Y_train = Variable(torch.tensor(Y_train.values, dtype=torch.double))
+            
+            # Handle both pandas DataFrames and numpy arrays
+            if hasattr(X_train, 'insert'):
+                # Pandas DataFrame - use insert method
+                X_train.insert(0,'ones', 1.0)
+                X_train = Variable(torch.tensor(X_train.values, dtype=torch.double))
+            else:
+                # Numpy array - add ones column using numpy
+                ones_col = np.ones((X_train.shape[0], 1))
+                X_train = np.column_stack([ones_col, X_train])
+                X_train = Variable(torch.tensor(X_train, dtype=torch.double))
+                
+            Y_train = Variable(torch.tensor(Y_train, dtype=torch.double))
         
             Theta = torch.inverse(X_train.T @ X_train) @ (X_train.T @ Y_train)
             Theta = Theta.T
@@ -439,10 +448,19 @@ class gamma_range(nn.Module):
 
         # Initialize the prediction layer weights to OLS regression weights
         X_train, Y_train = X.train(), Y.train()
-        X_train.insert(0,'ones', 1.0)
-
-        X_train = Variable(torch.tensor(X_train.values, dtype=torch.double))
-        Y_train = Variable(torch.tensor(Y_train.values, dtype=torch.double))
+        
+        # Handle both pandas DataFrames and numpy arrays
+        if hasattr(X_train, 'insert'):
+            # Pandas DataFrame - use insert method
+            X_train.insert(0,'ones', 1.0)
+            X_train = Variable(torch.tensor(X_train.values, dtype=torch.double))
+        else:
+            # Numpy array - add ones column using numpy
+            ones_col = np.ones((X_train.shape[0], 1))
+            X_train = np.column_stack([ones_col, X_train])
+            X_train = Variable(torch.tensor(X_train, dtype=torch.double))
+            
+        Y_train = Variable(torch.tensor(Y_train, dtype=torch.double))
     
         Theta = torch.inverse(X_train.T @ X_train) @ (X_train.T @ Y_train)
         Theta = Theta.T
