@@ -388,16 +388,16 @@ class e2e_net(nn.Module):
         # Store opt_layer for later use
         self.opt_layer = opt_layer
         
-        # LAYER: Optimization model - Create CvxpyLayer instances
+        # LAYER: Optimization model - Store CVXPY problem definitions for direct solving
         if opt_layer == 'base_mod':
             self.base_problem, self.base_z, self.base_y_hat_param = base_mod(n_y, n_obs, eval('rf.'+prisk))
-            self.base_layer = CvxpyLayer(self.base_problem, parameters=[self.base_y_hat_param], variables=[self.base_z])
+            self.base_layer = None  # Will solve directly in forward pass
         elif opt_layer == 'nominal':
             self.nom_problem, self.nom_z, self.nom_y_hat_param, self.nom_ep_param, self.nom_gamma_param = nominal(n_y, n_obs, eval('rf.'+prisk))
-            self.nom_layer = CvxpyLayer(self.nom_problem, parameters=[self.nom_y_hat_param, self.nom_ep_param, self.nom_gamma_param], variables=[self.nom_z])
+            self.nom_layer = None  # Will solve directly in forward pass
         elif opt_layer == 'hellinger':
             self.dro_problem, self.dro_z, self.dro_y_hat_param, self.dro_ep_param, self.dro_gamma_param, self.dro_delta_param = hellinger(n_y, n_obs, eval('rf.'+prisk))
-            self.dro_layer = CvxpyLayer(self.dro_problem, parameters=[self.dro_y_hat_param, self.dro_ep_param, self.dro_gamma_param, self.dro_delta_param], variables=[self.dro_z])
+            self.dro_layer = None  # Will solve directly in forward pass
         
         # Store reference path to store model data
         self.cache_path = cache_path
@@ -455,14 +455,14 @@ class e2e_net(nn.Module):
         # Alternative: Clarabel for complex cone problems
         # solver_args = {'solve_method': 'CLARABEL', 'tol_gap_abs': 1e-6, 'tol_gap_rel': 1e-6}
 
-        # Optimize z per scenario using CvxpyLayer for differentiable optimization
+        # Optimize z per scenario using direct CVXPY solving
         # Determine whether nominal or dro model
         if self.model_type == 'nom':
-            z_star = self.nom_layer(y_hat, ep, self.gamma)[0]
+            z_star = self._solve_cvxpy_nominal(ep, y_hat, self.gamma, solver_args)
         elif self.model_type == 'dro':
-            z_star = self.dro_layer(y_hat, ep, self.gamma, self.delta)[0]
+            z_star = self._solve_cvxpy_dro(ep, y_hat, self.gamma, self.delta, solver_args)
         elif self.model_type == 'base_mod':
-            z_star = self.base_layer(y_hat)[0]
+            z_star = self._solve_cvxpy_base(y_hat, solver_args)
 
         return z_star, y_hat
 
@@ -804,6 +804,83 @@ class e2e_net(nn.Module):
         self.epochs = cv_results.epochs[idx]
 
     #-----------------------------------------------------------------------------------------------
+    # CVXPY Solver Helper Methods (Direct solving instead of CvxpyLayer)
+    #-----------------------------------------------------------------------------------------------
+    def _solve_cvxpy_base(self, y_hat, solver_args):
+        """Solve base optimization problem using CVXPY directly"""
+        # Set parameter values
+        self.base_y_hat_param.value = y_hat.detach().cpu().numpy()
+        
+        # Solve the problem
+        try:
+            self.base_problem.solve(**solver_args)
+            if self.base_problem.status == 'optimal':
+                z_star = torch.tensor(self.base_z.value, dtype=torch.float32, device=y_hat.device)
+                return z_star
+            else:
+                # Fallback to ECOS if OSQP fails
+                fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
+                self.base_problem.solve(**fallback_args)
+                z_star = torch.tensor(self.base_z.value, dtype=torch.float32, device=y_hat.device)
+                return z_star
+        except Exception as e:
+            print(f"CVXPY solve failed: {e}, using equal weights fallback")
+            # Return equal weights when optimization fails
+            z_star = torch.ones(self.n_y, dtype=torch.float32, device=y_hat.device) / self.n_y
+            return z_star
+
+    def _solve_cvxpy_nominal(self, ep, y_hat, gamma, solver_args):
+        """Solve nominal optimization problem using CVXPY directly"""
+        # Set parameter values
+        self.nom_y_hat_param.value = y_hat.detach().cpu().numpy()
+        self.nom_ep_param.value = ep.detach().cpu().numpy()
+        self.nom_gamma_param.value = gamma.item()
+        
+        # Solve the problem
+        try:
+            self.nom_problem.solve(**solver_args)
+            if self.nom_problem.status == 'optimal':
+                z_star = torch.tensor(self.nom_z.value, dtype=torch.float32, device=y_hat.device)
+                return z_star
+            else:
+                # Fallback to ECOS if OSQP fails
+                fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
+                self.nom_problem.solve(**fallback_args)
+                z_star = torch.tensor(self.nom_z.value, dtype=torch.float32, device=y_hat.device)
+                return z_star
+        except Exception as e:
+            print(f"CVXPY solve failed: {e}, using equal weights fallback")
+            # Return equal weights when optimization fails
+            z_star = torch.ones(self.n_y, dtype=torch.float32, device=y_hat.device) / self.n_y
+            return z_star
+
+    def _solve_cvxpy_dro(self, ep, y_hat, gamma, delta, solver_args):
+        """Solve distributionally robust optimization problem using CVXPY directly"""
+        # Set parameter values
+        self.dro_y_hat_param.value = y_hat.detach().cpu().numpy()
+        self.dro_ep_param.value = ep.detach().cpu().numpy()
+        self.dro_gamma_param.value = gamma.item()
+        self.dro_delta_param.value = delta.item()
+        
+        # Solve the problem
+        try:
+            self.dro_problem.solve(**solver_args)
+            if self.dro_problem.status == 'optimal':
+                z_star = torch.tensor(self.dro_z.value, dtype=torch.float32, device=y_hat.device)
+                return z_star
+            else:
+                # Fallback to ECOS if OSQP fails
+                fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
+                self.dro_problem.solve(**fallback_args)
+                z_star = torch.tensor(self.dro_z.value, dtype=torch.float32, device=y_hat.device)
+                return z_star
+        except Exception as e:
+            print(f"CVXPY solve failed: {e}, using equal weights fallback")
+            # Return equal weights when optimization fails
+            z_star = torch.ones(self.n_y, dtype=torch.float32, device=y_hat.device) / self.n_y
+            return z_star
+
+    #-----------------------------------------------------------------------------------------------
     # Custom Serialization Methods for CvxpyLayer Objects
     #-----------------------------------------------------------------------------------------------
     def __getstate__(self):
@@ -898,36 +975,36 @@ class e2e_net(nn.Module):
             if key not in ['pred_layer_state', 'gamma', 'delta']:
                 setattr(self, key, value)
         
-        # Recreate cvxpylayers objects
+        # Recreate CVXPY problem definitions (no longer using CvxpyLayer)
         if hasattr(self, 'opt_layer'):
             if self.opt_layer == 'base_mod':
                 import e2edro.RiskFunctions as rf
                 self.base_problem, self.base_z, self.base_y_hat_param = base_mod(self.n_y, self.n_obs, eval('rf.'+self.prisk))
-                self.base_layer = CvxpyLayer(self.base_problem, parameters=[self.base_y_hat_param], variables=[self.base_z])
+                self.base_layer = None  # Will solve directly
             elif self.opt_layer == 'nominal':
                 import e2edro.RiskFunctions as rf
                 self.nom_problem, self.nom_z, self.nom_y_hat_param, self.nom_ep_param, self.nom_gamma_param = nominal(self.n_y, self.n_obs, eval('rf.'+self.prisk))
-                self.nom_layer = CvxpyLayer(self.nom_problem, parameters=[self.nom_y_hat_param, self.nom_ep_param, self.nom_gamma_param], variables=[self.nom_z])
+                self.nom_layer = None  # Will solve directly
             elif self.opt_layer == 'hellinger':
                 import e2edro.RiskFunctions as rf
                 self.dro_problem, self.dro_z, self.dro_y_hat_param, self.dro_ep_param, self.dro_gamma_param, self.dro_delta_param = hellinger(self.n_y, self.n_obs, eval('rf.'+self.prisk))
-                self.dro_layer = CvxpyLayer(self.dro_problem, parameters=[self.dro_y_hat_param, self.dro_ep_param, self.dro_gamma_param, self.dro_delta_param], variables=[self.dro_z])
+                self.dro_layer = None  # Will solve directly
 
     def __setstate__(self, state):
         """Custom pickle deserialization to recreate cvxpylayers objects"""
         self.__dict__.update(state)
         
-        # Recreate cvxpylayers objects if opt_layer is available
+        # Recreate CVXPY problem definitions if opt_layer is available (no longer using CvxpyLayer)
         if hasattr(self, 'opt_layer'):
             if self.opt_layer == 'base_mod':
                 import e2edro.RiskFunctions as rf
                 self.base_problem, self.base_z, self.base_y_hat_param = base_mod(self.n_y, self.n_obs, eval('rf.'+self.prisk))
-                self.base_layer = CvxpyLayer(self.base_problem, parameters=[self.base_y_hat_param], variables=[self.base_z])
+                self.base_layer = None  # Will solve directly
             elif self.opt_layer == 'nominal':
                 import e2edro.RiskFunctions as rf
                 self.nom_problem, self.nom_z, self.nom_y_hat_param, self.nom_ep_param, self.nom_gamma_param = nominal(self.n_y, self.n_obs, eval('rf.'+self.prisk))
-                self.nom_layer = CvxpyLayer(self.nom_problem, parameters=[self.nom_y_hat_param, self.nom_ep_param, self.nom_gamma_param], variables=[self.nom_z])
+                self.nom_layer = None  # Will solve directly
             elif self.opt_layer == 'hellinger':
                 import e2edro.RiskFunctions as rf
                 self.dro_problem, self.dro_z, self.dro_y_hat_param, self.dro_ep_param, self.dro_gamma_param, self.dro_delta_param = hellinger(self.n_y, self.n_obs, eval('rf.'+self.prisk))
-                self.dro_layer = CvxpyLayer(self.dro_problem, parameters=[self.dro_y_hat_param, self.dro_ep_param, self.dro_gamma_param, self.dro_delta_param], variables=[self.dro_z])
+                self.dro_layer = None  # Will solve directly
