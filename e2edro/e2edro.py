@@ -135,7 +135,7 @@ def nominal(n_y, n_obs, prisk):
     # Construct optimization problem
     problem = cp.Problem(objective, constraints)
 
-    return problem, z, y_hat, ep, gamma
+    return problem, z, y_hat
 
 #---------------------------------------------------------------------------------------------------
 # Total Variation: sum_t abs(p_t - q_t) <= delta
@@ -274,7 +274,7 @@ def hellinger(n_y, n_obs, prisk):
     # Construct optimization problem
     problem = cp.Problem(objective, constraints)
     
-    return problem, z, y_hat, ep, gamma, delta
+    return problem, z, y_hat
 
 ####################################################################################################
 # E2E neural network module
@@ -388,16 +388,16 @@ class e2e_net(nn.Module):
         # Store opt_layer for later use
         self.opt_layer = opt_layer
         
-        # LAYER: Optimization model - Store CVXPY problem definitions for direct solving
+        # LAYER: Optimization model - Create CvxpyLayer instances
         if opt_layer == 'base_mod':
             self.base_problem, self.base_z, self.base_y_hat_param = base_mod(n_y, n_obs, eval('rf.'+prisk))
-            self.base_layer = None  # Will solve directly in forward pass
+            self.base_layer = CvxpyLayer(self.base_problem, parameters=[self.base_y_hat_param], variables=[self.base_z])
         elif opt_layer == 'nominal':
             self.nom_problem, self.nom_z, self.nom_y_hat_param, self.nom_ep_param, self.nom_gamma_param = nominal(n_y, n_obs, eval('rf.'+prisk))
-            self.nom_layer = None  # Will solve directly in forward pass
+            self.nom_layer = CvxpyLayer(self.nom_problem, parameters=[self.nom_y_hat_param, self.nom_ep_param, self.nom_gamma_param], variables=[self.nom_z])
         elif opt_layer == 'hellinger':
             self.dro_problem, self.dro_z, self.dro_y_hat_param, self.dro_ep_param, self.dro_gamma_param, self.dro_delta_param = hellinger(n_y, n_obs, eval('rf.'+prisk))
-            self.dro_layer = None  # Will solve directly in forward pass
+            self.dro_layer = CvxpyLayer(self.dro_problem, parameters=[self.dro_y_hat_param, self.dro_ep_param, self.dro_gamma_param, self.dro_delta_param], variables=[self.dro_z])
         
         # Store reference path to store model data
         self.cache_path = cache_path
@@ -605,19 +605,10 @@ class e2e_net(nn.Module):
                     if self.pred_model == 'linear':
                         # Initialize the prediction layer weights to OLS regression weights
                         X_train, Y_train = X_temp.train(), Y_temp.train()
-                        
-                        # Handle both pandas DataFrames and numpy arrays
-                        if hasattr(X_train, 'insert'):
-                            # Pandas DataFrame - use insert method
-                            X_train.insert(0,'ones', 1.0)
-                            X_train = Variable(torch.tensor(X_train.values, dtype=torch.double))
-                        else:
-                            # Numpy array - add ones column using numpy
-                            ones_col = np.ones((X_train.shape[0], 1))
-                            X_train = np.column_stack([ones_col, X_train])
-                            X_train = Variable(torch.tensor(X_train, dtype=torch.double))
-                            
-                        Y_train = Variable(torch.tensor(Y_train, dtype=torch.double))
+                        X_train.insert(0,'ones', 1.0)
+
+                        X_train = Variable(torch.tensor(X_train.values, dtype=torch.double))
+                        Y_train = Variable(torch.tensor(Y_train.values, dtype=torch.double))
                     
                         Theta = torch.inverse(X_train.T @ X_train) @ (X_train.T @ Y_train)
                         Theta = Theta.T
@@ -638,9 +629,25 @@ class e2e_net(nn.Module):
                 results.epochs.append(epochs)
                 print('================================================')
 
-        # Convert results to dataframe
-        self.cv_results = results.df()
-        self.cv_results.to_pickle(self.init_state_path+'_results.pkl')
+        # Convert results to dataframe with error handling for pandas compatibility
+        try:
+            self.cv_results = results.df()
+            self.cv_results.to_pickle(self.init_state_path+'_results.pkl')
+        except Exception as e:
+            print(f"⚠️ Pandas DataFrame creation failed: {e}")
+            print("🔧 Creating DataFrame manually with numpy arrays...")
+            
+            # Create DataFrame manually by converting to Python native types
+            lr_clean = [float(lr.item()) if hasattr(lr, 'item') else float(lr) for lr in results.lr]
+            epochs_clean = [int(epoch.item()) if hasattr(epoch, 'item') else int(epoch) for epoch in results.epochs]
+            val_loss_clean = [float(vl.item()) if hasattr(vl, 'item') else float(vl) for vl in results.val_loss]
+            
+            self.cv_results = pd.DataFrame({
+                'lr': lr_clean,
+                'epochs': epochs_clean, 
+                'val_loss': val_loss_clean
+            })
+            print("✅ DataFrame created successfully")
 
         # Select and store the optimal hyperparameters
         idx = self.cv_results.val_loss.idxmin()
@@ -668,16 +675,7 @@ class e2e_net(nn.Module):
         """
 
         # Declare backtest object to hold the test results
-        # Create simple numeric indices for numpy arrays
-        test_data = Y.test()
-        if hasattr(test_data, 'index'):
-            # Pandas DataFrame - use existing index
-            dates = test_data.index[Y.n_obs:]
-        else:
-            # Numpy array - create simple numeric indices
-            dates = range(Y.n_obs, len(test_data))
-            
-        portfolio = pc.backtest(len(Y.test())-Y.n_obs, self.n_y, dates)
+        portfolio = pc.backtest(len(Y.test())-Y.n_obs, self.n_y, Y.test().index[Y.n_obs:])
 
         # Store trained gamma and delta values 
         if self.model_type == 'nom':
@@ -720,19 +718,10 @@ class e2e_net(nn.Module):
             if self.pred_model == 'linear':
                 # Initialize the prediction layer weights to OLS regression weights
                 X_train, Y_train = X.train(), Y.train()
-                
-                # Handle both pandas DataFrames and numpy arrays
-                if hasattr(X_train, 'insert'):
-                    # Pandas DataFrame - use insert method
-                    X_train.insert(0,'ones', 1.0)
-                    X_train = Variable(torch.tensor(X_train.values, dtype=torch.double))
-                else:
-                    # Numpy array - add ones column using numpy
-                    ones_col = np.ones((X_train.shape[0], 1))
-                    X_train = np.column_stack([ones_col, X_train])
-                    X_train = Variable(torch.tensor(X_train, dtype=torch.double))
-                    
-                Y_train = Variable(torch.tensor(Y_train, dtype=torch.double))
+                X_train.insert(0,'ones', 1.0)
+
+                X_train = Variable(torch.tensor(X_train.values, dtype=torch.double))
+                Y_train = Variable(torch.tensor(Y_train.values, dtype=torch.double))
             
                 Theta = torch.inverse(X_train.T @ X_train) @ (X_train.T @ Y_train)
                 Theta = Theta.T

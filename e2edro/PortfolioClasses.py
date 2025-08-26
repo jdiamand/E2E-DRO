@@ -131,16 +131,22 @@ class InSample:
     def df(self):
         """Return a pandas dataframe object by merging the self.lists
         """
+        # Convert numpy arrays and tensors to Python native types for pandas compatibility
+        loss_clean = [float(l.item()) if hasattr(l, 'item') else float(l) for l in self.loss]
+        gamma_clean = [float(g.item()) if hasattr(g, 'item') else float(g) for g in self.gamma]
+        delta_clean = [float(d.item()) if hasattr(d, 'item') else float(d) for d in self.delta]
+        val_loss_clean = [float(vl.item()) if hasattr(vl, 'item') else float(vl) for vl in self.val_loss]
+        
         if not self.delta and not self.val_loss:
-            return pd.DataFrame(list(zip(self.loss, self.gamma)), columns=['loss', 'gamma'])
+            return pd.DataFrame(list(zip(loss_clean, gamma_clean)), columns=['loss', 'gamma'])
         elif not self.delta:
-            return pd.DataFrame(list(zip(self.loss, self.val_loss, self.gamma)), 
+            return pd.DataFrame(list(zip(loss_clean, val_loss_clean, gamma_clean)), 
                             columns=['loss', 'val_loss', 'gamma'])
         elif not self.val_loss:
-            return pd.DataFrame(list(zip(self.loss, self.gamma, self.delta)), 
+            return pd.DataFrame(list(zip(loss_clean, gamma_clean, delta_clean)), 
                             columns=['loss', 'gamma', 'delta'])
         else:
-            return pd.DataFrame(list(zip(self.loss, self.val_loss, self.gamma, self.delta)), 
+            return pd.DataFrame(list(zip(loss_clean, val_loss_clean, gamma_clean, delta_clean)), 
                             columns=['loss', 'val_loss', 'gamma', 'delta'])
 
 
@@ -167,6 +173,11 @@ class CrossVal:
     def df(self):
         """Return a pandas dataframe object by merging the self.lists
         """
-        return pd.DataFrame(list(zip(self.lr, self.epochs, self.val_loss)), 
+        # Convert numpy arrays and tensors to Python native types for pandas compatibility
+        lr_clean = [float(lr.item()) if hasattr(lr, 'item') else float(lr) for lr in self.lr]
+        epochs_clean = [int(epoch.item()) if hasattr(epoch, 'item') else int(epoch) for epoch in self.epochs]
+        val_loss_clean = [float(vl.item()) if hasattr(vl, 'item') else float(vl) for vl in self.val_loss]
+        
+        return pd.DataFrame(list(zip(lr_clean, epochs_clean, val_loss_clean)), 
                             columns=['lr', 'epochs', 'val_loss'])
 
