@@ -152,10 +152,9 @@ class pred_then_opt(nn.Module):
                 z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
                 return z_star
         except Exception as e:
-            print(f"CVXPY solve failed: {e}, falling back to ECOS")
-            fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
-            problem.solve(**fallback_args)
-            z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
+            print(f"CVXPY solve failed: {e}, using equal weights fallback")
+            # Return equal weights when optimization fails
+            z_star = torch.ones(self.n_y, dtype=torch.float32, device=y_hat.device) / self.n_y
             return z_star
 
     def _solve_cvxpy_nominal(self, ep, y_hat, gamma, solver_args):
@@ -182,10 +181,9 @@ class pred_then_opt(nn.Module):
                 z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
                 return z_star
         except Exception as e:
-            print(f"CVXPY solve failed: {e}, falling back to ECOS")
-            fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
-            problem.solve(**fallback_args)
-            z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
+            print(f"CVXPY solve failed: {e}, using equal weights fallback")
+            # Return equal weights when optimization fails
+            z_star = torch.ones(self.n_y, dtype=torch.float32, device=y_hat.device) / self.n_y
             return z_star
 
     def _solve_cvxpy_dro(self, ep, y_hat, gamma, delta, solver_args):
@@ -213,10 +211,9 @@ class pred_then_opt(nn.Module):
                 z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
                 return z_star
         except Exception as e:
-            print(f"CVXPY solve failed: {e}, falling back to ECOS")
-            fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
-            problem.solve(**fallback_args)
-            z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
+            print(f"CVXPY solve failed: {e}, using equal weights fallback")
+            # Return equal weights when optimization fails
+            z_star = torch.ones(self.n_y, dtype=torch.float32, device=y_hat.device) / self.n_y
             return z_star
 
     #-----------------------------------------------------------------------------------------------
