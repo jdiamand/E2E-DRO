@@ -20,20 +20,25 @@ class TrainTest:
         """Object to hold the training, validation and testing datasets
 
         Inputs
-        data: pandas dataframe with time series data
+        data: numpy array or pandas dataframe with time series data
         n_obs: Number of observations per batch
         split: list of ratios that control the partition of data into training, testing and 
         validation sets. 
     
         Output. TrainTest object with fields and functions:
-        data: Field. Holds the original pandas dataframe
-        train(): Function. Returns a pandas dataframe with the training subset of observations
+        data: Field. Holds the original data (numpy array or pandas dataframe)
+        train(): Function. Returns the training subset of observations
         """
         self.data = data
         self.n_obs = n_obs
         self.split = split
 
-        n_obs_tot = self.data.shape[0]
+        # Handle both numpy arrays and pandas dataframes
+        if hasattr(self.data, 'shape'):
+            n_obs_tot = self.data.shape[0]
+        else:
+            n_obs_tot = len(self.data)
+            
         numel = n_obs_tot * np.cumsum(split)
         self.numel = [round(i) for i in numel]
 
@@ -252,9 +257,9 @@ def synthetic_exp(n_x=5, n_y=10, n_tot=1200, n_obs=104, split=[0.6, 0.4], set_se
     # Synthetic outputs
     Y = (alpha + X @ beta + exp_noise + gauss_noise).clip(-0.2,0.3) / 15
 
-    # Convert to dataframes
-    X = pd.DataFrame(X)
-    Y = pd.DataFrame(Y)
+    # Keep as numpy arrays to avoid pandas corruption issues
+    # X = pd.DataFrame(X)  # Commented out due to pandas corruption
+    # Y = pd.DataFrame(Y)  # Commented out due to pandas corruption
     
     # Partition dataset into training and testing sets
     return TrainTest(X, n_obs, split), TrainTest(Y, n_obs, split)
