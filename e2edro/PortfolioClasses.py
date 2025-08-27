@@ -39,6 +39,9 @@ class SlidingWindow(Dataset):
         if hasattr(X, 'values'):
             # X is a pandas DataFrame
             X_data = X.values
+        elif hasattr(X, 'to_numpy'):
+            # X is a pandas DataFrame with to_numpy method
+            X_data = X.to_numpy()
         else:
             # X is already a numpy array
             X_data = X
@@ -46,6 +49,9 @@ class SlidingWindow(Dataset):
         if hasattr(Y, 'values'):
             # Y is a pandas DataFrame
             Y_data = Y.values
+        elif hasattr(Y, 'to_numpy'):
+            # Y is a pandas DataFrame with to_numpy method
+            Y_data = Y.to_numpy()
         else:
             # Y is already a numpy array
             Y_data = Y
