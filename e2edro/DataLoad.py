@@ -46,14 +46,28 @@ class TrainTest:
         self.numel = [round(i) for i in numel]
 
     def train(self):
-        """Return the training subset of observations
+        """Return the training subset of observations as numpy array
         """
-        return self.data[:self.numel[0]]
+        data_slice = self.data[:self.numel[0]]
+        # Force conversion to numpy array to avoid pandas corruption
+        if hasattr(data_slice, 'values'):
+            return data_slice.values
+        elif hasattr(data_slice, 'to_numpy'):
+            return data_slice.to_numpy()
+        else:
+            return np.array(data_slice)
 
     def test(self):
-        """Return the test subset of observations
+        """Return the test subset of observations as numpy array
         """
-        return self.data[self.numel[0]-self.n_obs:self.numel[1]]
+        data_slice = self.data[self.numel[0]-self.n_obs:self.numel[1]]
+        # Force conversion to numpy array to avoid pandas corruption
+        if hasattr(data_slice, 'values'):
+            return data_slice.values
+        elif hasattr(data_slice, 'to_numpy'):
+            return data_slice.to_numpy()
+        else:
+            return np.array(data_slice)
     
     def index(self):
         """Return index for the test subset (compatible with both pandas and numpy)
