@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
+import pandas as pd
 
 import e2edro.RiskFunctions as rf
 import e2edro.LossFunctions as lf
