@@ -43,7 +43,6 @@ class pred_then_opt(nn.Module):
         self.n_x = n_x
         self.n_y = n_y
         self.n_obs = n_obs
-        self.prisk = prisk
 
         # Register 'gamma' (risk-return trade-off parameter)
         # self.gamma = nn.Parameter(torch.FloatTensor(1).uniform_(0.037, 0.173))
@@ -68,7 +67,7 @@ class pred_then_opt(nn.Module):
             self.model_type = 'dro'
 
         # LAYER: OLS linear prediction
-        self.pred_layer = nn.Linear(n_x, n_y).double()
+        self.pred_layer = nn.Linear(n_x, n_y)
         self.pred_layer.weight.requires_grad = False
         self.pred_layer.bias.requires_grad = False
         
@@ -132,9 +131,7 @@ class pred_then_opt(nn.Module):
     #-----------------------------------------------------------------------------------------------
     def _solve_cvxpy_base(self, y_hat, solver_args):
         """Solve base optimization problem using CVXPY directly"""
-        # Convert string to actual risk function
-        risk_func = eval('rf.' + self.prisk)
-        problem, z, y_hat_param = e2e.base_mod(self.n_y, self.n_obs, risk_func)
+        problem, z, y_hat_param = e2e.base_mod(self.n_y, self.n_obs, self.prisk)
         
         # Set parameter values
         y_hat_param.value = y_hat.detach().cpu().numpy()
@@ -152,21 +149,18 @@ class pred_then_opt(nn.Module):
                 z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
                 return z_star
         except Exception as e:
-            print(f"CVXPY solve failed: {e}, using equal weights fallback")
-            # Return equal weights when optimization fails
-            z_star = torch.ones(self.n_y, dtype=torch.float32, device=y_hat.device) / self.n_y
+            print(f"CVXPY solve failed: {e}, falling back to ECOS")
+            fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
+            problem.solve(**fallback_args)
+            z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
             return z_star
 
     def _solve_cvxpy_nominal(self, ep, y_hat, gamma, solver_args):
         """Solve nominal optimization problem using CVXPY directly"""
-        # Convert string to actual risk function
-        risk_func = eval('rf.' + self.prisk)
-        problem, z, y_hat_param, ep_param, gamma_param = e2e.nominal(self.n_y, self.n_obs, risk_func)
+        problem, z, y_hat_param = e2e.nominal(self.n_y, self.n_obs, self.prisk)
         
         # Set parameter values
         y_hat_param.value = y_hat.detach().cpu().numpy()
-        ep_param.value = ep.detach().cpu().numpy()
-        gamma_param.value = gamma.item()
         
         # Solve the problem
         try:
@@ -181,22 +175,18 @@ class pred_then_opt(nn.Module):
                 z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
                 return z_star
         except Exception as e:
-            print(f"CVXPY solve failed: {e}, using equal weights fallback")
-            # Return equal weights when optimization fails
-            z_star = torch.ones(self.n_y, dtype=torch.float32, device=y_hat.device) / self.n_y
+            print(f"CVXPY solve failed: {e}, falling back to ECOS")
+            fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
+            problem.solve(**fallback_args)
+            z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
             return z_star
 
     def _solve_cvxpy_dro(self, ep, y_hat, gamma, delta, solver_args):
         """Solve distributionally robust optimization problem using CVXPY directly"""
-        # Convert string to actual risk function
-        risk_func = eval('rf.' + self.prisk)
-        problem, z, y_hat_param, ep_param, gamma_param, delta_param = e2e.hellinger(self.n_y, self.n_obs, risk_func)
+        problem, z, y_hat_param = e2e.hellinger(self.n_y, self.n_obs, self.prisk)
         
         # Set parameter values
         y_hat_param.value = y_hat.detach().cpu().numpy()
-        ep_param.value = ep.detach().cpu().numpy()
-        gamma_param.value = gamma.item()
-        delta_param.value = delta.item()
         
         # Solve the problem
         try:
@@ -211,9 +201,10 @@ class pred_then_opt(nn.Module):
                 z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
                 return z_star
         except Exception as e:
-            print(f"CVXPY solve failed: {e}, using equal weights fallback")
-            # Return equal weights when optimization fails
-            z_star = torch.ones(self.n_y, dtype=torch.float32, device=y_hat.device) / self.n_y
+            print(f"CVXPY solve failed: {e}, falling back to ECOS")
+            fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
+            problem.solve(**fallback_args)
+            z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
             return z_star
 
     #-----------------------------------------------------------------------------------------------
@@ -232,16 +223,7 @@ class pred_then_opt(nn.Module):
         """
 
         # Declare backtest object to hold the test results
-        # Create simple numeric indices for numpy arrays
-        test_data = Y.test()
-        if hasattr(test_data, 'index'):
-            # Pandas DataFrame - use existing index
-            dates = test_data.index[Y.n_obs:]
-        else:
-            # Numpy array - create simple numeric indices
-            dates = range(Y.n_obs, len(test_data))
-            
-        portfolio = pc.backtest(len(Y.test())-Y.n_obs, self.n_y, dates)
+        portfolio = pc.backtest(len(Y.test())-Y.n_obs, self.n_y, Y.test().index[Y.n_obs:])
 
         # Store initial train/test split
         init_split = Y.split
@@ -276,7 +258,7 @@ class pred_then_opt(nn.Module):
                 ones_col = np.ones((X_train.shape[0], 1))
                 X_train = np.column_stack([ones_col, X_train])
                 X_train = Variable(torch.tensor(X_train, dtype=torch.double))
-                
+            
             Y_train = Variable(torch.tensor(Y_train, dtype=torch.double))
         
             Theta = torch.inverse(X_train.T @ X_train) @ (X_train.T @ Y_train)
@@ -344,16 +326,7 @@ class equal_weight:
         """
 
         # Declare backtest object to hold the test results
-        # Create simple numeric indices for numpy arrays
-        test_data = Y.test()
-        if hasattr(test_data, 'index'):
-            # Pandas DataFrame - use existing index
-            dates = test_data.index[Y.n_obs:]
-        else:
-            # Numpy array - create simple numeric indices
-            dates = range(Y.n_obs, len(test_data))
-            
-        portfolio = pc.backtest(len(Y.test())-Y.n_obs, self.n_y, dates)
+        portfolio = pc.backtest(len(Y.test())-Y.n_obs, self.n_y, Y.test().index[Y.n_obs:])
 
         test_set = DataLoader(pc.SlidingWindow(X.test(), Y.test(), self.n_obs, 0))
 
@@ -468,7 +441,7 @@ class gamma_range(nn.Module):
             ones_col = np.ones((X_train.shape[0], 1))
             X_train = np.column_stack([ones_col, X_train])
             X_train = Variable(torch.tensor(X_train, dtype=torch.double))
-            
+        
         Y_train = Variable(torch.tensor(Y_train, dtype=torch.double))
     
         Theta = torch.inverse(X_train.T @ X_train) @ (X_train.T @ Y_train)
