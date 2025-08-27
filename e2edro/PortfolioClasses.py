@@ -118,8 +118,16 @@ class backtest:
         self.mean = (tri[-1])**(1/len(tri)) - 1
         self.vol = np.std(self.rets)
         self.sharpe = self.mean / self.vol
-        self.rets = pd.DataFrame({'Date':self.dates, 'rets': self.rets, 'tri': tri})
-        self.rets = self.rets.set_index('Date')
+        
+        # Try to create pandas DataFrame, fallback to numpy array if it fails
+        try:
+            self.rets = pd.DataFrame({'Date':self.dates, 'rets': self.rets, 'tri': tri})
+            self.rets = self.rets.set_index('Date')
+        except Exception as e:
+            print(f"⚠️ Pandas DataFrame creation failed: {e}")
+            print("🔧 Storing results as numpy array instead...")
+            # Store as numpy array to avoid pandas corruption
+            self.rets = np.column_stack([self.dates, self.rets, tri])
 
 ####################################################################################################
 # InSample object to store in-sample results
