@@ -67,7 +67,7 @@ class pred_then_opt(nn.Module):
             self.model_type = 'dro'
 
         # LAYER: OLS linear prediction
-        self.pred_layer = nn.Linear(n_x, n_y)
+        self.pred_layer = nn.Linear(n_x, n_y, dtype=torch.double)
         self.pred_layer.weight.requires_grad = False
         self.pred_layer.bias.requires_grad = False
         
@@ -140,19 +140,19 @@ class pred_then_opt(nn.Module):
         try:
             problem.solve(**solver_args)
             if problem.status == 'optimal':
-                z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
+                z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
                 return z_star
             else:
                 # Fallback to ECOS if OSQP fails
                 fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
                 problem.solve(**fallback_args)
-                z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
+                z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
                 return z_star
         except Exception as e:
             print(f"CVXPY solve failed: {e}, falling back to ECOS")
             fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
             problem.solve(**fallback_args)
-            z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
+            z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
             return z_star
 
     def _solve_cvxpy_nominal(self, ep, y_hat, gamma, solver_args):
@@ -166,19 +166,19 @@ class pred_then_opt(nn.Module):
         try:
             problem.solve(**solver_args)
             if problem.status == 'optimal':
-                z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
+                z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
                 return z_star
             else:
                 # Fallback to ECOS if OSQP fails
                 fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
                 problem.solve(**fallback_args)
-                z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
+                z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
                 return z_star
         except Exception as e:
             print(f"CVXPY solve failed: {e}, falling back to ECOS")
             fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
             problem.solve(**fallback_args)
-            z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
+            z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
             return z_star
 
     def _solve_cvxpy_dro(self, ep, y_hat, gamma, delta, solver_args):
@@ -192,19 +192,19 @@ class pred_then_opt(nn.Module):
         try:
             problem.solve(**solver_args)
             if problem.status == 'optimal':
-                z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
+                z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
                 return z_star
             else:
                 # Fallback to ECOS if OSQP fails
                 fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
                 problem.solve(**fallback_args)
-                z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
+                z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
                 return z_star
         except Exception as e:
             print(f"CVXPY solve failed: {e}, falling back to ECOS")
             fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
             problem.solve(**fallback_args)
-            z_star = torch.tensor(z.value, dtype=torch.float32, device=y_hat.device)
+            z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
             return z_star
 
     #-----------------------------------------------------------------------------------------------
@@ -248,13 +248,19 @@ class pred_then_opt(nn.Module):
 
             X_train, Y_train = X.train(), Y.train()
             
+            # Debug: Check data types
+            print(f"🔍 DEBUG: X_train type: {type(X_train)}, has insert: {hasattr(X_train, 'insert')}")
+            print(f"🔍 DEBUG: Y_train type: {type(Y_train)}")
+            
             # Handle both pandas DataFrames and numpy arrays
             if hasattr(X_train, 'insert'):
                 # Pandas DataFrame - use insert method
+                print("🔍 DEBUG: Using pandas insert method")
                 X_train.insert(0,'ones', 1.0)
                 X_train = Variable(torch.tensor(X_train.values, dtype=torch.double))
             else:
                 # Numpy array - add ones column using numpy
+                print("🔍 DEBUG: Using numpy fallback")
                 ones_col = np.ones((X_train.shape[0], 1))
                 X_train = np.column_stack([ones_col, X_train])
                 X_train = Variable(torch.tensor(X_train, dtype=torch.double))
@@ -371,7 +377,7 @@ class gamma_range(nn.Module):
         self.n_obs = n_obs
 
         # LAYER: OLS linear prediction
-        self.pred_layer = nn.Linear(n_x, n_y)
+        self.pred_layer = nn.Linear(n_x, n_y, dtype=torch.double)
         self.pred_layer.weight.requires_grad = False
         self.pred_layer.bias.requires_grad = False
 
