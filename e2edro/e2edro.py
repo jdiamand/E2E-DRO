@@ -112,6 +112,10 @@ def nominal(n_y, n_obs, prisk):
     Objective
     Minimize (1/n_obs) * cp.sum(obj_aux) - gamma * mu_aux
     """
+    # Convert string risk function to callable function
+    import e2edro.RiskFunctions as rf
+    prisk_func = eval('rf.'+prisk)
+    
     # Variables
     z = cp.Variable((n_y,1), nonneg=True)
     c_aux = cp.Variable()
@@ -127,7 +131,7 @@ def nominal(n_y, n_obs, prisk):
     constraints = [cp.sum(z) == 1,
                     mu_aux == y_hat @ z]
     for i in range(n_obs):
-        constraints += [obj_aux[i] >= prisk(z, c_aux, ep[i])]
+        constraints += [obj_aux[i] >= prisk_func(z, c_aux, ep[i])]
 
     # Objective function
     objective = cp.Minimize((1/n_obs) * cp.sum(obj_aux) - gamma * mu_aux)
@@ -174,6 +178,9 @@ def tv(n_y, n_obs, prisk):
     Objective
     Minimize eta_aux + delta * lambda_aux + (1/n_obs) * sum(beta_aux) - gamma * y_hat @ z
     """
+    # Convert string risk function to callable function
+    import e2edro.RiskFunctions as rf
+    prisk_func = eval('rf.'+prisk)
 
     # Variables
     z = cp.Variable((n_y,1), nonneg=True)
@@ -194,8 +201,8 @@ def tv(n_y, n_obs, prisk):
                     beta_aux >= -lambda_aux,
                     mu_aux == y_hat @ z]
     for i in range(n_obs):
-        constraints += [beta_aux[i] >= prisk(z, c_aux, ep[i]) - eta_aux]
-        constraints += [lambda_aux >= prisk(z, c_aux, ep[i]) - eta_aux]
+        constraints += [beta_aux[i] >= prisk_func(z, c_aux, ep[i]) - eta_aux]
+        constraints += [lambda_aux >= prisk_func(z, c_aux, ep[i]) - eta_aux]
 
     # Objective function
     objective = cp.Minimize(eta_aux + delta * lambda_aux + (1/n_obs) * cp.sum(beta_aux)
@@ -244,6 +251,9 @@ def hellinger(n_y, n_obs, prisk):
     Objective
     Minimize xi_aux + (delta-1) * lambda_aux + (1/n_obs) * sum(beta_aux) - gamma * y_hat @ z
     """
+    # Convert string risk function to callable function
+    import e2edro.RiskFunctions as rf
+    prisk_func = eval('rf.'+prisk)
 
     # Variables
     z = cp.Variable((n_y,1), nonneg=True)
@@ -264,7 +274,7 @@ def hellinger(n_y, n_obs, prisk):
     constraints = [cp.sum(z) == 1,
                     mu_aux == y_hat @ z]
     for i in range(n_obs):
-        constraints += [xi_aux + lambda_aux >= prisk(z, c_aux, ep[i]) + tau_aux[i]]
+        constraints += [xi_aux + lambda_aux >= prisk_func(z, c_aux, ep[i]) + tau_aux[i]]
         constraints += [beta_aux[i] >= cp.quad_over_lin(lambda_aux, tau_aux[i])]
     
     # Objective function
