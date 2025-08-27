@@ -19,8 +19,8 @@ class SlidingWindow(Dataset):
         """Construct a sliding (i.e., rolling) window dataset from a complete timeseries dataset
 
         Inputs
-        X: pandas dataframe with the complete feature dataset
-        Y: pandas dataframe with the complete asset return dataset
+        X: pandas dataframe or numpy array with the complete feature dataset
+        Y: pandas dataframe or numpy array with the complete asset return dataset
         n_obs: Number of scenarios in the window
         perf_period: Number of scenarios in the 'performance window' used to evaluate out-of-sample
         performance. The 'performance window' is also a sliding window
@@ -37,24 +37,18 @@ class SlidingWindow(Dataset):
         """
         # Handle both pandas DataFrames and numpy arrays
         if hasattr(X, 'values'):
+            # X is a pandas DataFrame
             X_data = X.values
-        elif hasattr(X, 'to_numpy'):
-            X_data = X.to_numpy()
         else:
+            # X is already a numpy array
             X_data = X
             
         if hasattr(Y, 'values'):
+            # Y is a pandas DataFrame
             Y_data = Y.values
-        elif hasattr(Y, 'to_numpy'):
-            Y_data = Y.to_numpy()
         else:
+            # Y is already a numpy array
             Y_data = Y
-        
-        # Ensure we have numpy arrays
-        if not isinstance(X_data, np.ndarray):
-            X_data = np.array(X_data)
-        if not isinstance(Y_data, np.ndarray):
-            Y_data = np.array(Y_data)
         
         self.X = Variable(torch.tensor(X_data, dtype=torch.double))
         self.Y = Variable(torch.tensor(Y_data, dtype=torch.double))
@@ -102,10 +96,8 @@ class backtest:
         self.mean = (tri[-1])**(1/len(tri)) - 1
         self.vol = np.std(self.rets)
         self.sharpe = self.mean / self.vol
-        
-        # Store results as numpy arrays to avoid pandas corruption
-        self.rets_array = np.column_stack([self.dates, self.rets, tri])
-        self.rets = self.rets_array  # Store as numpy array instead of pandas DataFrame
+        self.rets = pd.DataFrame({'Date':self.dates, 'rets': self.rets, 'tri': tri})
+        self.rets = self.rets.set_index('Date')
 
 ####################################################################################################
 # InSample object to store in-sample results
@@ -131,22 +123,16 @@ class InSample:
     def df(self):
         """Return a pandas dataframe object by merging the self.lists
         """
-        # Convert numpy arrays and tensors to Python native types for pandas compatibility
-        loss_clean = [float(l.item()) if hasattr(l, 'item') else float(l) for l in self.loss]
-        gamma_clean = [float(g.item()) if hasattr(g, 'item') else float(g) for g in self.gamma]
-        delta_clean = [float(d.item()) if hasattr(d, 'item') else float(d) for d in self.delta]
-        val_loss_clean = [float(vl.item()) if hasattr(vl, 'item') else float(vl) for vl in self.val_loss]
-        
         if not self.delta and not self.val_loss:
-            return pd.DataFrame(list(zip(loss_clean, gamma_clean)), columns=['loss', 'gamma'])
+            return pd.DataFrame(list(zip(self.loss, self.gamma)), columns=['loss', 'gamma'])
         elif not self.delta:
-            return pd.DataFrame(list(zip(loss_clean, val_loss_clean, gamma_clean)), 
+            return pd.DataFrame(list(zip(self.loss, self.val_loss, self.gamma)), 
                             columns=['loss', 'val_loss', 'gamma'])
         elif not self.val_loss:
-            return pd.DataFrame(list(zip(loss_clean, gamma_clean, delta_clean)), 
+            return pd.DataFrame(list(zip(self.loss, self.gamma, self.delta)), 
                             columns=['loss', 'gamma', 'delta'])
         else:
-            return pd.DataFrame(list(zip(loss_clean, val_loss_clean, gamma_clean, delta_clean)), 
+            return pd.DataFrame(list(zip(self.loss, self.val_loss, self.gamma, self.delta)), 
                             columns=['loss', 'val_loss', 'gamma', 'delta'])
 
 
@@ -173,11 +159,6 @@ class CrossVal:
     def df(self):
         """Return a pandas dataframe object by merging the self.lists
         """
-        # Convert numpy arrays and tensors to Python native types for pandas compatibility
-        lr_clean = [float(lr.item()) if hasattr(lr, 'item') else float(lr) for lr in self.lr]
-        epochs_clean = [int(epoch.item()) if hasattr(epoch, 'item') else int(epoch) for epoch in self.epochs]
-        val_loss_clean = [float(vl.item()) if hasattr(vl, 'item') else float(vl) for vl in self.val_loss]
-        
-        return pd.DataFrame(list(zip(lr_clean, epochs_clean, val_loss_clean)), 
+        return pd.DataFrame(list(zip(self.lr, self.epochs, self.val_loss)), 
                             columns=['lr', 'epochs', 'val_loss'])
 
