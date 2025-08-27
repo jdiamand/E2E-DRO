@@ -191,6 +191,13 @@ class CrossVal:
     def df(self):
         """Return a pandas dataframe object by merging the self.lists
         """
-        return pd.DataFrame(list(zip(self.lr, self.epochs, self.val_loss)), 
-                            columns=['lr', 'epochs', 'val_loss'])
+        # Try to create pandas DataFrame, fallback to numpy array if it fails
+        try:
+            return pd.DataFrame(list(zip(self.lr, self.epochs, self.val_loss)), 
+                                columns=['lr', 'epochs', 'val_loss'])
+        except Exception as e:
+            print(f"⚠️ Pandas DataFrame creation failed in CrossVal.df(): {e}")
+            print("🔧 Returning numpy array instead...")
+            # Return as numpy array to avoid pandas corruption
+            return np.column_stack([self.lr, self.epochs, self.val_loss])
 

@@ -661,7 +661,15 @@ class e2e_net(nn.Module):
         # Convert results to dataframe with error handling for pandas compatibility
         try:
             self.cv_results = results.df()
-            self.cv_results.to_pickle(self.init_state_path+'_results.pkl')
+            # Check if results.df() returned a numpy array instead of DataFrame
+            if hasattr(self.cv_results, 'to_pickle'):
+                # It's a pandas DataFrame, save it
+                self.cv_results.to_pickle(self.init_state_path+'_results.pkl')
+            else:
+                # It's a numpy array, convert it to DataFrame
+                print("🔧 results.df() returned numpy array, converting to DataFrame...")
+                self.cv_results = pd.DataFrame(self.cv_results, columns=['lr', 'epochs', 'val_loss'])
+                self.cv_results.to_pickle(self.init_state_path+'_results.pkl')
         except Exception as e:
             print(f"⚠️ Pandas DataFrame creation failed: {e}")
             print("🔧 Creating DataFrame manually with numpy arrays...")
