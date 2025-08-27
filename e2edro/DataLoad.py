@@ -146,8 +146,9 @@ def synthetic_nl(n_x=5, n_y=10, n_tot=1200, n_obs=104, split=[0.6, 0.4], set_see
     # Synthetic outputs
     Y = a + X @ b + X2 @ c + X_cross @ d + s * np.random.randn(n_tot, n_y)
 
-    X = pd.DataFrame(X)
-    Y = pd.DataFrame(Y)
+    # Keep as numpy arrays to avoid pandas corruption
+    # X = pd.DataFrame(X)  # Commented out to avoid pandas corruption
+    # Y = pd.DataFrame(Y)  # Commented out to avoid pandas corruption
     
     # Partition dataset into training and testing sets
     return TrainTest(X, n_obs, split), TrainTest(Y, n_obs, split)
@@ -182,8 +183,9 @@ def synthetic_NN(n_x=5, n_y=10, n_tot=1200, n_obs=104, split=[0.6, 0.4], set_see
     # Synthetic outputs
     Y = synth(torch.from_numpy(X))
 
-    X = pd.DataFrame(X)
-    Y = pd.DataFrame(Y.detach().numpy()) / 10
+    # Keep as numpy arrays to avoid pandas corruption
+    # X = pd.DataFrame(X)  # Commented out to avoid pandas corruption
+    # Y = pd.DataFrame(Y.detach().numpy()) / 10  # Commented out to avoid pandas corruption
     
     # Partition dataset into training and testing sets
     return TrainTest(X, n_obs, split), TrainTest(Y, n_obs, split)
@@ -263,9 +265,9 @@ def synthetic_exp(n_x=5, n_y=10, n_tot=1200, n_obs=104, split=[0.6, 0.4], set_se
     # Synthetic outputs
     Y = (alpha + X @ beta + exp_noise + gauss_noise).clip(-0.2,0.3) / 15
 
-    # Convert to dataframes
-    X = pd.DataFrame(X)
-    Y = pd.DataFrame(Y)
+    # Keep as numpy arrays to avoid pandas corruption
+    # X = pd.DataFrame(X)  # Commented out to avoid pandas corruption
+    # Y = pd.DataFrame(Y)  # Commented out to avoid pandas corruption
     
     # Partition dataset into training and testing sets
     return TrainTest(X, n_obs, split), TrainTest(Y, n_obs, split)
