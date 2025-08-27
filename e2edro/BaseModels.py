@@ -203,13 +203,15 @@ class pred_then_opt(nn.Module):
 
     def _solve_cvxpy_dro(self, ep, y_hat, gamma, delta, solver_args):
         """Solve distributionally robust optimization problem using CVXPY directly"""
-        problem, z, y_hat_param, ep_param, gamma_param = e2e.hellinger(self.n_y, self.n_obs, self.prisk)
+        problem, z, y_hat_param, ep_param, gamma_param, delta_param = e2e.hellinger(self.n_y, self.n_obs, self.prisk)
         
         # Set parameter values
         y_hat_param.value = y_hat.detach().cpu().numpy()
         ep_param.value = ep.detach().cpu().numpy()
         # Extract scalar value from gamma tensor
         gamma_param.value = gamma.detach().cpu().numpy().item()
+        # Extract scalar value from delta tensor
+        delta_param.value = delta.detach().cpu().numpy().item()
         
         # Solve the problem
         try:
