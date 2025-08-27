@@ -161,13 +161,14 @@ class pred_then_opt(nn.Module):
                 print(f"ECOS fallback also failed: {e2}, returning equal weights as final fallback")
                 # Final fallback: return equal weights that maintain gradient flow
                 n_assets = self.n_y
-                # Create equal weights by manipulating input tensors to maintain gradient connection
-                # Handle both 1D and 2D y_hat tensors
+                # Create equal weights by scaling the input tensor to maintain gradient connection
+                # This ensures the weights are part of the computation graph
                 if y_hat.dim() == 1:
-                    equal_weights = torch.zeros_like(y_hat)  # Same shape as y_hat
+                    # For 1D tensors, scale the entire tensor
+                    equal_weights = (y_hat * 0.0) + (1.0 / n_assets)
                 else:
-                    equal_weights = torch.zeros_like(y_hat[0, :])  # Same shape as y_hat[0, :]
-                equal_weights = equal_weights + (1.0 / n_assets)  # Add constant to maintain gradient flow
+                    # For 2D tensors, scale the first row
+                    equal_weights = (y_hat[0, :] * 0.0) + (1.0 / n_assets)
                 return equal_weights
 
     def _solve_cvxpy_nominal(self, ep, y_hat, gamma, solver_args):
@@ -204,13 +205,14 @@ class pred_then_opt(nn.Module):
                 print(f"ECOS fallback also failed: {e2}, returning equal weights as final fallback")
                 # Final fallback: return equal weights that maintain gradient flow
                 n_assets = self.n_y
-                # Create equal weights by manipulating input tensors to maintain gradient connection
-                # Handle both 1D and 2D y_hat tensors
+                # Create equal weights by scaling the input tensor to maintain gradient connection
+                # This ensures the weights are part of the computation graph
                 if y_hat.dim() == 1:
-                    equal_weights = torch.zeros_like(y_hat)  # Same shape as y_hat
+                    # For 1D tensors, scale the entire tensor
+                    equal_weights = (y_hat * 0.0) + (1.0 / n_assets)
                 else:
-                    equal_weights = torch.zeros_like(y_hat[0, :])  # Same shape as y_hat[0, :]
-                equal_weights = equal_weights + (1.0 / n_assets)  # Add constant to maintain gradient flow
+                    # For 2D tensors, scale the first row
+                    equal_weights = (y_hat[0, :] * 0.0) + (1.0 / n_assets)
                 return equal_weights
 
     def _solve_cvxpy_dro(self, ep, y_hat, gamma, delta, solver_args):
@@ -249,13 +251,14 @@ class pred_then_opt(nn.Module):
                 print(f"ECOS fallback also failed: {e2}, returning equal weights as final fallback")
                 # Final fallback: return equal weights that maintain gradient flow
                 n_assets = self.n_y
-                # Create equal weights by manipulating input tensors to maintain gradient connection
-                # Handle both 1D and 2D y_hat tensors
+                # Create equal weights by scaling the input tensor to maintain gradient connection
+                # This ensures the weights are part of the computation graph
                 if y_hat.dim() == 1:
-                    equal_weights = torch.zeros_like(y_hat)  # Same shape as y_hat
+                    # For 1D tensors, scale the entire tensor
+                    equal_weights = (y_hat * 0.0) + (1.0 / n_assets)
                 else:
-                    equal_weights = torch.zeros_like(y_hat[0, :])  # Same shape as y_hat[0, :]
-                equal_weights = equal_weights + (1.0 / n_assets)  # Add constant to maintain gradient flow
+                    # For 2D tensors, scale the first row
+                    equal_weights = (y_hat[0, :] * 0.0) + (1.0 / n_assets)
                 return equal_weights
 
     #-----------------------------------------------------------------------------------------------
