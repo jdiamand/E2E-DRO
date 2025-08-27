@@ -35,26 +35,42 @@ class SlidingWindow(Dataset):
         optimization. Therefore, no pair in 'y' is required (it is assumed the pair y_T is not yet
         observable)
         """
-        # Handle both pandas DataFrames and numpy arrays
-        if hasattr(X, 'values'):
-            # X is a pandas DataFrame
-            X_data = X.values
-        elif hasattr(X, 'to_numpy'):
-            # X is a pandas DataFrame with to_numpy method
-            X_data = X.to_numpy()
-        else:
-            # X is already a numpy array
-            X_data = X
+        # Handle both pandas DataFrames and numpy arrays with robust fallbacks
+        try:
+            if hasattr(X, 'values'):
+                # X is a pandas DataFrame
+                X_data = X.values
+            elif hasattr(X, 'to_numpy'):
+                # X is a pandas DataFrame with to_numpy method
+                X_data = X.to_numpy()
+            else:
+                # X is already a numpy array
+                X_data = X
+        except Exception as e:
+            # Fallback: try to convert to numpy array directly
+            try:
+                X_data = np.array(X)
+            except Exception as e2:
+                print(f"⚠️ Failed to convert X to numpy array: {e2}")
+                raise e2
             
-        if hasattr(Y, 'values'):
-            # Y is a pandas DataFrame
-            Y_data = Y.values
-        elif hasattr(Y, 'to_numpy'):
-            # Y is a pandas DataFrame with to_numpy method
-            Y_data = Y.to_numpy()
-        else:
-            # Y is already a numpy array
-            Y_data = Y
+        try:
+            if hasattr(Y, 'values'):
+                # Y is a pandas DataFrame
+                Y_data = Y.values
+            elif hasattr(Y, 'to_numpy'):
+                # Y is a pandas DataFrame with to_numpy method
+                Y_data = Y.to_numpy()
+            else:
+                # Y is already a numpy array
+                Y_data = Y
+        except Exception as e:
+            # Fallback: try to convert to numpy array directly
+            try:
+                Y_data = np.array(Y)
+            except Exception as e2:
+                print(f"⚠️ Failed to convert Y to numpy array: {e2}")
+                raise e2
         
         self.X = Variable(torch.tensor(X_data, dtype=torch.double))
         self.Y = Variable(torch.tensor(Y_data, dtype=torch.double))
