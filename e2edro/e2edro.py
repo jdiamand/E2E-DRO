@@ -520,7 +520,7 @@ class e2e_net(nn.Module):
         n_train = len(train_set)
 
         # Train the neural network
-        for epoch in range(epochs):
+        for epoch in range(int(epochs)):
                 
             # TRAINING: forward + backward pass
             train_loss = 0
