@@ -127,7 +127,9 @@ class backtest:
             print(f"⚠️ Pandas DataFrame creation failed: {e}")
             print("🔧 Storing results as numpy array instead...")
             # Store as numpy array to avoid pandas corruption
-            self.rets = np.column_stack([self.dates, self.rets, tri])
+            # Convert dates to numeric indices to avoid dtype conflicts
+            date_indices = np.arange(len(self.dates))
+            self.rets = np.column_stack([date_indices, self.rets, tri])
 
 ####################################################################################################
 # InSample object to store in-sample results
