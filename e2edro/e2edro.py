@@ -112,9 +112,12 @@ def nominal(n_y, n_obs, prisk):
     Objective
     Minimize (1/n_obs) * cp.sum(obj_aux) - gamma * mu_aux
     """
-    # Convert string risk function to callable function
-    import e2edro.RiskFunctions as rf
-    prisk_func = eval('rf.'+prisk)
+    # Convert string risk function to callable function (handle both string and function inputs)
+    if isinstance(prisk, str):
+        import e2edro.RiskFunctions as rf
+        prisk_func = eval('rf.'+prisk)
+    else:
+        prisk_func = prisk  # prisk is already a function
     
     # Variables
     z = cp.Variable((n_y,1), nonneg=True)
@@ -178,9 +181,12 @@ def tv(n_y, n_obs, prisk):
     Objective
     Minimize eta_aux + delta * lambda_aux + (1/n_obs) * sum(beta_aux) - gamma * y_hat @ z
     """
-    # Convert string risk function to callable function
-    import e2edro.RiskFunctions as rf
-    prisk_func = eval('rf.'+prisk)
+    # Convert string risk function to callable function (handle both string and function inputs)
+    if isinstance(prisk, str):
+        import e2edro.RiskFunctions as rf
+        prisk_func = eval('rf.'+prisk)
+    else:
+        prisk_func = prisk  # prisk is already a function
 
     # Variables
     z = cp.Variable((n_y,1), nonneg=True)
@@ -251,9 +257,12 @@ def hellinger(n_y, n_obs, prisk):
     Objective
     Minimize xi_aux + (delta-1) * lambda_aux + (1/n_obs) * sum(beta_aux) - gamma * y_hat @ z
     """
-    # Convert string risk function to callable function
-    import e2edro.RiskFunctions as rf
-    prisk_func = eval('rf.'+prisk)
+    # Convert string risk function to callable function (handle both string and function inputs)
+    if isinstance(prisk, str):
+        import e2edro.RiskFunctions as rf
+        prisk_func = eval('rf.'+prisk)
+    else:
+        prisk_func = prisk  # prisk is already a function
 
     # Variables
     z = cp.Variable((n_y,1), nonneg=True)
