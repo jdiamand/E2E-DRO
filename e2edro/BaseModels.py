@@ -159,9 +159,12 @@ class pred_then_opt(nn.Module):
                 return z_star
             except Exception as e2:
                 print(f"ECOS fallback also failed: {e2}, returning equal weights as final fallback")
-                # Final fallback: return equal weights
+                # Final fallback: return equal weights that maintain gradient flow
                 n_assets = self.n_y
-                equal_weights = torch.ones(n_assets, dtype=torch.double, device=y_hat.device) / n_assets
+                # Create equal weights that are differentiable and connected to the input
+                equal_weights = torch.ones(n_assets, dtype=torch.double, device=y_hat.device, requires_grad=True) / n_assets
+                # Ensure the weights maintain the same shape and device as expected
+                equal_weights = equal_weights.to(y_hat.device).to(y_hat.dtype)
                 return equal_weights
 
     def _solve_cvxpy_nominal(self, ep, y_hat, gamma, solver_args):
@@ -196,9 +199,12 @@ class pred_then_opt(nn.Module):
                 return z_star
             except Exception as e2:
                 print(f"ECOS fallback also failed: {e2}, returning equal weights as final fallback")
-                # Final fallback: return equal weights
+                # Final fallback: return equal weights that maintain gradient flow
                 n_assets = self.n_y
-                equal_weights = torch.ones(n_assets, dtype=torch.double, device=y_hat.device) / n_assets
+                # Create equal weights that are differentiable and connected to the input
+                equal_weights = torch.ones(n_assets, dtype=torch.double, device=y_hat.device, requires_grad=True) / n_assets
+                # Ensure the weights maintain the same shape and device as expected
+                equal_weights = equal_weights.to(y_hat.device).to(y_hat.dtype)
                 return equal_weights
 
     def _solve_cvxpy_dro(self, ep, y_hat, gamma, delta, solver_args):
@@ -235,9 +241,12 @@ class pred_then_opt(nn.Module):
                 return z_star
             except Exception as e2:
                 print(f"ECOS fallback also failed: {e2}, returning equal weights as final fallback")
-                # Final fallback: return equal weights
+                # Final fallback: return equal weights that maintain gradient flow
                 n_assets = self.n_y
-                equal_weights = torch.ones(n_assets, dtype=torch.double, device=y_hat.device) / n_assets
+                # Create equal weights that are differentiable and connected to the input
+                equal_weights = torch.ones(n_assets, dtype=torch.double, device=y_hat.device, requires_grad=True) / n_assets
+                # Ensure the weights maintain the same shape and device as expected
+                equal_weights = equal_weights.to(y_hat.device).to(y_hat.dtype)
                 return equal_weights
 
     #-----------------------------------------------------------------------------------------------
