@@ -151,10 +151,18 @@ class pred_then_opt(nn.Module):
                 return z_star
         except Exception as e:
             print(f"CVXPY solve failed: {e}, falling back to ECOS")
-            fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
-            problem.solve(**fallback_args)
-            z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
-            return z_star
+            try:
+                # Try ECOS fallback with robust error handling for base method
+                fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
+                problem.solve(**fallback_args)
+                z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
+                return z_star
+            except Exception as e2:
+                print(f"ECOS fallback also failed: {e2}, returning equal weights as final fallback")
+                # Final fallback: return equal weights
+                n_assets = self.n_y
+                equal_weights = torch.ones(n_assets, dtype=torch.double, device=y_hat.device) / n_assets
+                return equal_weights
 
     def _solve_cvxpy_nominal(self, ep, y_hat, gamma, solver_args):
         """Solve nominal optimization problem using CVXPY directly"""
@@ -180,10 +188,18 @@ class pred_then_opt(nn.Module):
                 return z_star
         except Exception as e:
             print(f"CVXPY solve failed: {e}, falling back to ECOS")
-            fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
-            problem.solve(**fallback_args)
-            z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
-            return z_star
+            try:
+                # Try ECOS fallback with robust error handling for nominal method
+                fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
+                problem.solve(**fallback_args)
+                z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
+                return z_star
+            except Exception as e2:
+                print(f"ECOS fallback also failed: {e2}, returning equal weights as final fallback")
+                # Final fallback: return equal weights
+                n_assets = self.n_y
+                equal_weights = torch.ones(n_assets, dtype=torch.double, device=y_hat.device) / n_assets
+                return equal_weights
 
     def _solve_cvxpy_dro(self, ep, y_hat, gamma, delta, solver_args):
         """Solve distributionally robust optimization problem using CVXPY directly"""
@@ -209,10 +225,18 @@ class pred_then_opt(nn.Module):
                 return z_star
         except Exception as e:
             print(f"CVXPY solve failed: {e}, falling back to ECOS")
-            fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
-            problem.solve(**fallback_args)
-            z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
-            return z_star
+            try:
+                # Try ECOS fallback with robust error handling for DRO method
+                fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
+                problem.solve(**fallback_args)
+                z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
+                return z_star
+            except Exception as e2:
+                print(f"ECOS fallback also failed: {e2}, returning equal weights as final fallback")
+                # Final fallback: return equal weights
+                n_assets = self.n_y
+                equal_weights = torch.ones(n_assets, dtype=torch.double, device=y_hat.device) / n_assets
+                return equal_weights
 
     #-----------------------------------------------------------------------------------------------
     # net_test: Test the e2e neural net
