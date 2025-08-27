@@ -162,8 +162,11 @@ class pred_then_opt(nn.Module):
                 # Final fallback: return equal weights that maintain gradient flow
                 n_assets = self.n_y
                 # Create equal weights by manipulating input tensors to maintain gradient connection
-                # Use y_hat to create a gradient-connected tensor
-                equal_weights = torch.zeros_like(y_hat[0, :])  # Same shape as y_hat[0, :]
+                # Handle both 1D and 2D y_hat tensors
+                if y_hat.dim() == 1:
+                    equal_weights = torch.zeros_like(y_hat)  # Same shape as y_hat
+                else:
+                    equal_weights = torch.zeros_like(y_hat[0, :])  # Same shape as y_hat[0, :]
                 equal_weights = equal_weights + (1.0 / n_assets)  # Add constant to maintain gradient flow
                 return equal_weights
 
@@ -202,8 +205,11 @@ class pred_then_opt(nn.Module):
                 # Final fallback: return equal weights that maintain gradient flow
                 n_assets = self.n_y
                 # Create equal weights by manipulating input tensors to maintain gradient connection
-                # Use y_hat to create a gradient-connected tensor
-                equal_weights = torch.zeros_like(y_hat[0, :])  # Same shape as y_hat[0, :]
+                # Handle both 1D and 2D y_hat tensors
+                if y_hat.dim() == 1:
+                    equal_weights = torch.zeros_like(y_hat)  # Same shape as y_hat
+                else:
+                    equal_weights = torch.zeros_like(y_hat[0, :])  # Same shape as y_hat[0, :]
                 equal_weights = equal_weights + (1.0 / n_assets)  # Add constant to maintain gradient flow
                 return equal_weights
 
@@ -244,8 +250,11 @@ class pred_then_opt(nn.Module):
                 # Final fallback: return equal weights that maintain gradient flow
                 n_assets = self.n_y
                 # Create equal weights by manipulating input tensors to maintain gradient connection
-                # Use y_hat to create a gradient-connected tensor
-                equal_weights = torch.zeros_like(y_hat[0, :])  # Same shape as y_hat[0, :]
+                # Handle both 1D and 2D y_hat tensors
+                if y_hat.dim() == 1:
+                    equal_weights = torch.zeros_like(y_hat)  # Same shape as y_hat
+                else:
+                    equal_weights = torch.zeros_like(y_hat[0, :])  # Same shape as y_hat[0, :]
                 equal_weights = equal_weights + (1.0 / n_assets)  # Add constant to maintain gradient flow
                 return equal_weights
 
