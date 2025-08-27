@@ -684,7 +684,7 @@ class e2e_net(nn.Module):
         """
 
         # Declare backtest object to hold the test results
-        portfolio = pc.backtest(len(Y.test())-Y.n_obs, self.n_y, Y.test().index[Y.n_obs:])
+        portfolio = pc.backtest(len(Y.test())-Y.n_obs, self.n_y, Y.index()[Y.n_obs:])
 
         # Store trained gamma and delta values 
         if self.model_type == 'nom':

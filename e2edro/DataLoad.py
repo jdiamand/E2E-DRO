@@ -54,6 +54,16 @@ class TrainTest:
         """Return the test subset of observations
         """
         return self.data[self.numel[0]-self.n_obs:self.numel[1]]
+    
+    def index(self):
+        """Return index for the test subset (compatible with both pandas and numpy)
+        """
+        if hasattr(self.data, 'index'):
+            # Pandas DataFrame
+            return self.data.index[self.numel[0]-self.n_obs:self.numel[1]]
+        else:
+            # Numpy array - return numeric indices
+            return np.arange(self.numel[0]-self.n_obs, self.numel[1])
 
 ####################################################################################################
 # Generate linear synthetic data
@@ -90,8 +100,9 @@ def synthetic(n_x=5, n_y=10, n_tot=1200, n_obs=104, split=[0.6, 0.4], set_seed=1
     # Synthetic outputs
     Y = a + X @ b + X2 @ c + s * np.random.randn(n_tot, n_y)
 
-    X = pd.DataFrame(X)
-    Y = pd.DataFrame(Y)
+    # Keep as numpy arrays to avoid pandas corruption
+    # X = pd.DataFrame(X)  # Commented out to avoid pandas corruption
+    # Y = pd.DataFrame(Y)  # Commented out to avoid pandas corruption
     
     # Partition dataset into training and testing sets
     return TrainTest(X, n_obs, split), TrainTest(Y, n_obs, split)
