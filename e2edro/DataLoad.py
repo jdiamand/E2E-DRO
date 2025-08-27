@@ -50,11 +50,15 @@ class TrainTest:
         """
         data_slice = self.data[:self.numel[0]]
         # Force conversion to numpy array to avoid pandas corruption
-        if hasattr(data_slice, 'values'):
-            return data_slice.values
-        elif hasattr(data_slice, 'to_numpy'):
-            return data_slice.to_numpy()
-        else:
+        try:
+            if hasattr(data_slice, 'values'):
+                return data_slice.values
+            elif hasattr(data_slice, 'to_numpy'):
+                return data_slice.to_numpy()
+            else:
+                return np.array(data_slice)
+        except Exception:
+            # Final fallback: convert to numpy array
             return np.array(data_slice)
 
     def test(self):
@@ -62,11 +66,15 @@ class TrainTest:
         """
         data_slice = self.data[self.numel[0]-self.n_obs:self.numel[1]]
         # Force conversion to numpy array to avoid pandas corruption
-        if hasattr(data_slice, 'values'):
-            return data_slice.values
-        elif hasattr(data_slice, 'to_numpy'):
-            return data_slice.to_numpy()
-        else:
+        try:
+            if hasattr(data_slice, 'values'):
+                return data_slice.values
+            elif hasattr(data_slice, 'to_numpy'):
+                return data_slice.to_numpy()
+            else:
+                return np.array(data_slice)
+        except Exception:
+            # Final fallback: convert to numpy array
             return np.array(data_slice)
     
     def index(self):
