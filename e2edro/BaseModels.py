@@ -163,7 +163,8 @@ class pred_then_opt(nn.Module):
         # Set parameter values
         y_hat_param.value = y_hat.detach().cpu().numpy()
         ep_param.value = ep.detach().cpu().numpy()
-        gamma_param.value = gamma.detach().cpu().numpy()
+        # Extract scalar value from gamma tensor
+        gamma_param.value = gamma.detach().cpu().numpy().item()
         
         # Solve the problem
         try:
@@ -191,7 +192,8 @@ class pred_then_opt(nn.Module):
         # Set parameter values
         y_hat_param.value = y_hat.detach().cpu().numpy()
         ep_param.value = ep.detach().cpu().numpy()
-        gamma_param.value = gamma.detach().cpu().numpy()
+        # Extract scalar value from gamma tensor
+        gamma_param.value = gamma.detach().cpu().numpy().item()
         
         # Solve the problem
         try:
