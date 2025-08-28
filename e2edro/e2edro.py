@@ -296,6 +296,50 @@ def hellinger(n_y, n_obs, prisk):
     
     return problem, z, y_hat, ep, gamma, delta
 
+# NumpyArrayWrapper class for pandas-like functionality
+class NumpyArrayWrapper:
+    """Wrapper class that provides pandas-like functionality for numpy arrays"""
+    def __init__(self, array):
+        self.array = array
+        # Column mapping: [lr, epochs, val_loss]
+        self.lr = array[:, 0]
+        self.epochs = array[:, 1]
+        self.val_loss = array[:, 2]
+    
+    def sort_values(self, columns, **kwargs):
+        # Sort by the specified columns (numpy array sorting)
+        if isinstance(columns, list):
+            # Sort by multiple columns (primary: first column, secondary: second column)
+            if len(columns) == 2:
+                # Sort by first column, then by second column
+                sorted_indices = np.lexsort((self.array[:, self._get_column_index(columns[1])], 
+                                           self.array[:, self._get_column_index(columns[0])]))
+            else:
+                # Sort by first column only
+                sorted_indices = np.argsort(self.array[:, self._get_column_index(columns[0])])
+        else:
+            # Sort by single column
+            sorted_indices = np.argsort(self.array[:, self._get_column_index(columns)])
+        
+        # Return sorted array
+        return NumpyArrayWrapper(self.array[sorted_indices])
+    
+    def _get_column_index(self, column_name):
+        # Map column names to array indices
+        column_map = {'lr': 0, 'epochs': 1, 'val_loss': 2}
+        return column_map.get(column_name, 0)
+    
+    def round(self, decimals=4):
+        # Round all values to specified decimal places
+        return NumpyArrayWrapper(np.round(self.array, decimals=decimals))
+    
+    def __getitem__(self, key):
+        # Allow indexing like df[0] or df[0:5]
+        return NumpyArrayWrapper(self.array[key])
+    
+    def __len__(self):
+        return len(self.array)
+
 ####################################################################################################
 # E2E neural network module
 ####################################################################################################
@@ -741,50 +785,7 @@ class e2e_net(nn.Module):
     def _ensure_dataframe_compatibility(self):
         """Ensure cv_results has pandas-like functionality even when it's a numpy array"""
         if not hasattr(self.cv_results, 'sort_values'):
-            # Create a wrapper object that provides pandas-like methods
-            class NumpyArrayWrapper:
-                def __init__(self, array):
-                    self.array = array
-                    # Column mapping: [lr, epochs, val_loss]
-                    self.lr = array[:, 0]
-                    self.epochs = array[:, 1]
-                    self.val_loss = array[:, 2]
-                
-                def sort_values(self, columns, **kwargs):
-                    # Sort by the specified columns (numpy array sorting)
-                    if isinstance(columns, list):
-                        # Sort by multiple columns (primary: first column, secondary: second column)
-                        if len(columns) == 2:
-                            # Sort by first column, then by second column
-                            sorted_indices = np.lexsort((self.array[:, self._get_column_index(columns[1])], 
-                                                       self.array[:, self._get_column_index(columns[0])]))
-                        else:
-                            # Sort by first column only
-                            sorted_indices = np.argsort(self.array[:, self._get_column_index(columns[0])])
-                    else:
-                        # Sort by single column
-                        sorted_indices = np.argsort(self.array[:, self._get_column_index(columns)])
-                    
-                    # Return sorted array
-                    return NumpyArrayWrapper(self.array[sorted_indices])
-                
-                def _get_column_index(self, column_name):
-                    # Map column names to array indices
-                    column_map = {'lr': 0, 'epochs': 1, 'val_loss': 2}
-                    return column_map.get(column_name, 0)
-                
-                def round(self, decimals=4):
-                    # Round all values to specified decimal places
-                    return NumpyArrayWrapper(np.round(self.array, decimals=decimals))
-                
-                def __getitem__(self, key):
-                    # Allow indexing like df[0] or df[0:5]
-                    return NumpyArrayWrapper(self.array[key])
-                
-                def __len__(self):
-                    return len(self.array)
-            
-            # Replace cv_results with the wrapper
+            # Use the module-level NumpyArrayWrapper class
             self.cv_results = NumpyArrayWrapper(self.cv_results)
 
     #-----------------------------------------------------------------------------------------------
