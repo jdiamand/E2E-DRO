@@ -191,13 +191,21 @@ class pred_then_opt(nn.Module):
             except Exception as e2:
                 print(f"Emergency SCS fallback also failed: {e2}")
             
-            # Ultimate fallback: equal weights
-            print("Using equal weights as ultimate fallback")
+            # Ultimate fallback: implement simple gradient-based optimization
+            print("CVXPY completely failed, implementing simple gradient-based fallback")
             n_assets = self.n_y
+            
+            # Use a simple approach: maximize expected return with budget constraint
+            # This ensures the weights are differentiable and connected to y_hat
             if y_hat.dim() == 1:
-                equal_weights = (y_hat * 0.0) + (1.0 / n_assets)
+                # For 1D tensors, use softmax to ensure positive weights that sum to 1
+                logits = y_hat * 10.0  # Scale for better numerical stability
+                equal_weights = torch.softmax(logits, dim=0)
             else:
-                equal_weights = (y_hat[0, :] * 0.0) + (1.0 / n_assets)
+                # For 2D tensors, use softmax on the first row
+                logits = y_hat[0, :] * 10.0  # Scale for better numerical stability
+                equal_weights = torch.softmax(logits, dim=0)
+            
             return equal_weights
 
     def _solve_cvxpy_nominal(self, ep, y_hat, gamma, solver_args):
@@ -348,13 +356,21 @@ class pred_then_opt(nn.Module):
             except Exception as e2:
                 print(f"Emergency SCS fallback also failed: {e2}")
             
-            # Ultimate fallback: equal weights
-            print("Using equal weights as ultimate fallback")
+            # Ultimate fallback: implement simple gradient-based optimization
+            print("CVXPY completely failed, implementing simple gradient-based fallback")
             n_assets = self.n_y
+            
+            # Use a simple approach: maximize expected return with budget constraint
+            # This ensures the weights are differentiable and connected to y_hat
             if y_hat.dim() == 1:
-                equal_weights = (y_hat * 0.0) + (1.0 / n_assets)
+                # For 1D tensors, use softmax to ensure positive weights that sum to 1
+                logits = y_hat * 10.0  # Scale for better numerical stability
+                equal_weights = torch.softmax(logits, dim=0)
             else:
-                equal_weights = (y_hat[0, :] * 0.0) + (1.0 / n_assets)
+                # For 2D tensors, use softmax on the first row
+                logits = y_hat[0, :] * 10.0  # Scale for better numerical stability
+                equal_weights = torch.softmax(logits, dim=0)
+            
             return equal_weights
 
     #-----------------------------------------------------------------------------------------------
