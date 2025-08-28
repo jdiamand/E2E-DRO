@@ -137,39 +137,61 @@ class pred_then_opt(nn.Module):
         # Set parameter values
         y_hat_param.value = y_hat.detach().cpu().numpy()
         
-        # Solve the problem
+        # Solve the problem with comprehensive fallback strategy
         try:
+            # First attempt: Primary solver
             problem.solve(**solver_args)
             if problem.status == 'optimal':
                 z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
                 return z_star
+            
+            # Second attempt: ECOS with relaxed tolerances
+            print(f"Primary solver failed with status: {problem.status}, trying ECOS...")
+            fallback_args = {'solve_method': 'ECOS', 'max_iters': 200, 'abstol': 1e-6, 'reltol': 1e-6}
+            problem.solve(**fallback_args)
+            if problem.status == 'optimal':
+                z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
+                return z_star
+                
+            # Third attempt: SCS with very relaxed tolerances
+            print(f"ECOS failed with status: {problem.status}, trying SCS...")
+            scs_args = {'solve_method': 'SCS', 'max_iters': 1000, 'eps': 1e-4, 'alpha': 1.5}
+            problem.solve(**scs_args)
+            if problem.status == 'optimal':
+                z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
+                return z_star
+                
+            # If all solvers fail, use equal weights as final fallback
+            print(f"All CVXPY solvers failed, using equal weights fallback")
+            n_assets = self.n_y
+            # Create equal weights by scaling the input tensor to maintain gradient connection
+            if y_hat.dim() == 1:
+                equal_weights = (y_hat * 0.0) + (1.0 / n_assets)
             else:
-                # Fallback to ECOS if OSQP fails
-                fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
-                problem.solve(**fallback_args)
-                z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
-                return z_star
+                equal_weights = (y_hat[0, :] * 0.0) + (1.0 / n_assets)
+            return equal_weights
+            
         except Exception as e:
-            print(f"CVXPY solve failed: {e}, falling back to ECOS")
+            print(f"CVXPY solve failed with exception: {e}")
+            # Try one more time with SCS as emergency fallback
             try:
-                # Try ECOS fallback with robust error handling for base method
-                fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
-                problem.solve(**fallback_args)
-                z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
-                return z_star
+                print("Trying SCS as emergency fallback...")
+                scs_args = {'solve_method': 'SCS', 'max_iters': 1000, 'eps': 1e-3}
+                problem.solve(**scs_args)
+                if problem.status == 'optimal':
+                    z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
+                    return z_star
             except Exception as e2:
-                print(f"ECOS fallback also failed: {e2}, returning equal weights as final fallback")
-                # Final fallback: return equal weights that maintain gradient flow
-                n_assets = self.n_y
-                # Create equal weights by scaling the input tensor to maintain gradient connection
-                # This ensures the weights are part of the computation graph
-                if y_hat.dim() == 1:
-                    # For 1D tensors, scale the entire tensor
-                    equal_weights = (y_hat * 0.0) + (1.0 / n_assets)
-                else:
-                    # For 2D tensors, scale the first row
-                    equal_weights = (y_hat[0, :] * 0.0) + (1.0 / n_assets)
-                return equal_weights
+                print(f"Emergency SCS fallback also failed: {e2}")
+            
+            # Ultimate fallback: equal weights
+            print("Using equal weights as ultimate fallback")
+            n_assets = self.n_y
+            if y_hat.dim() == 1:
+                equal_weights = (y_hat * 0.0) + (1.0 / n_assets)
+            else:
+                equal_weights = (y_hat[0, :] * 0.0) + (1.0 / n_assets)
+            return equal_weights
 
     def _solve_cvxpy_nominal(self, ep, y_hat, gamma, solver_args):
         """Solve nominal optimization problem using CVXPY directly"""
@@ -181,39 +203,61 @@ class pred_then_opt(nn.Module):
         # Extract scalar value from gamma tensor
         gamma_param.value = gamma.detach().cpu().numpy().item()
         
-        # Solve the problem
+        # Solve the problem with comprehensive fallback strategy
         try:
+            # First attempt: Primary solver
             problem.solve(**solver_args)
             if problem.status == 'optimal':
                 z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
                 return z_star
+            
+            # Second attempt: ECOS with relaxed tolerances
+            print(f"Primary solver failed with status: {problem.status}, trying ECOS...")
+            fallback_args = {'solve_method': 'ECOS', 'max_iters': 200, 'abstol': 1e-6, 'reltol': 1e-6}
+            problem.solve(**fallback_args)
+            if problem.status == 'optimal':
+                z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
+                return z_star
+                
+            # Third attempt: SCS with very relaxed tolerances
+            print(f"ECOS failed with status: {problem.status}, trying SCS...")
+            scs_args = {'solve_method': 'SCS', 'max_iters': 1000, 'eps': 1e-4, 'alpha': 1.5}
+            problem.solve(**scs_args)
+            if problem.status == 'optimal':
+                z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
+                return z_star
+                
+            # If all solvers fail, use equal weights as final fallback
+            print(f"All CVXPY solvers failed, using equal weights fallback")
+            n_assets = self.n_y
+            # Create equal weights by scaling the input tensor to maintain gradient connection
+            if y_hat.dim() == 1:
+                equal_weights = (y_hat * 0.0) + (1.0 / n_assets)
             else:
-                # Fallback to ECOS if OSQP fails
-                fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
-                problem.solve(**fallback_args)
-                z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
-                return z_star
+                equal_weights = (y_hat[0, :] * 0.0) + (1.0 / n_assets)
+            return equal_weights
+            
         except Exception as e:
-            print(f"CVXPY solve failed: {e}, falling back to ECOS")
+            print(f"CVXPY solve failed with exception: {e}")
+            # Try one more time with SCS as emergency fallback
             try:
-                # Try ECOS fallback with robust error handling for nominal method
-                fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
-                problem.solve(**fallback_args)
-                z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
-                return z_star
+                print("Trying SCS as emergency fallback...")
+                scs_args = {'solve_method': 'SCS', 'max_iters': 1000, 'eps': 1e-3}
+                problem.solve(**scs_args)
+                if problem.status == 'optimal':
+                    z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
+                    return z_star
             except Exception as e2:
-                print(f"ECOS fallback also failed: {e2}, returning equal weights as final fallback")
-                # Final fallback: return equal weights that maintain gradient flow
-                n_assets = self.n_y
-                # Create equal weights by scaling the input tensor to maintain gradient connection
-                # This ensures the weights are part of the computation graph
-                if y_hat.dim() == 1:
-                    # For 1D tensors, scale the entire tensor
-                    equal_weights = (y_hat * 0.0) + (1.0 / n_assets)
-                else:
-                    # For 2D tensors, scale the first row
-                    equal_weights = (y_hat[0, :] * 0.0) + (1.0 / n_assets)
-                return equal_weights
+                print(f"Emergency SCS fallback also failed: {e2}")
+            
+            # Ultimate fallback: equal weights
+            print("Using equal weights as ultimate fallback")
+            n_assets = self.n_y
+            if y_hat.dim() == 1:
+                equal_weights = (y_hat * 0.0) + (1.0 / n_assets)
+            else:
+                equal_weights = (y_hat[0, :] * 0.0) + (1.0 / n_assets)
+            return equal_weights
 
     def _solve_cvxpy_dro(self, ep, y_hat, gamma, delta, solver_args):
         """Solve distributionally robust optimization problem using CVXPY directly"""
@@ -227,39 +271,61 @@ class pred_then_opt(nn.Module):
         # Extract scalar value from delta tensor
         delta_param.value = delta.detach().cpu().numpy().item()
         
-        # Solve the problem
+        # Solve the problem with comprehensive fallback strategy
         try:
+            # First attempt: Primary solver
             problem.solve(**solver_args)
             if problem.status == 'optimal':
                 z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
                 return z_star
+            
+            # Second attempt: ECOS with relaxed tolerances
+            print(f"Primary solver failed with status: {problem.status}, trying ECOS...")
+            fallback_args = {'solve_method': 'ECOS', 'max_iters': 200, 'abstol': 1e-6, 'reltol': 1e-6}
+            problem.solve(**fallback_args)
+            if problem.status == 'optimal':
+                z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
+                return z_star
+                
+            # Third attempt: SCS with very relaxed tolerances
+            print(f"ECOS failed with status: {problem.status}, trying SCS...")
+            scs_args = {'solve_method': 'SCS', 'max_iters': 1000, 'eps': 1e-4, 'alpha': 1.5}
+            problem.solve(**scs_args)
+            if problem.status == 'optimal':
+                z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
+                return z_star
+                
+            # If all solvers fail, use equal weights as final fallback
+            print(f"All CVXPY solvers failed, using equal weights fallback")
+            n_assets = self.n_y
+            # Create equal weights by scaling the input tensor to maintain gradient connection
+            if y_hat.dim() == 1:
+                equal_weights = (y_hat * 0.0) + (1.0 / n_assets)
             else:
-                # Fallback to ECOS if OSQP fails
-                fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
-                problem.solve(**fallback_args)
-                z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
-                return z_star
+                equal_weights = (y_hat[0, :] * 0.0) + (1.0 / n_assets)
+            return equal_weights
+            
         except Exception as e:
-            print(f"CVXPY solve failed: {e}, falling back to ECOS")
+            print(f"CVXPY solve failed with exception: {e}")
+            # Try one more time with SCS as emergency fallback
             try:
-                # Try ECOS fallback with robust error handling for DRO method
-                fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
-                problem.solve(**fallback_args)
-                z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
-                return z_star
+                print("Trying SCS as emergency fallback...")
+                scs_args = {'solve_method': 'SCS', 'max_iters': 1000, 'eps': 1e-3}
+                problem.solve(**scs_args)
+                if problem.status == 'optimal':
+                    z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
+                    return z_star
             except Exception as e2:
-                print(f"ECOS fallback also failed: {e2}, returning equal weights as final fallback")
-                # Final fallback: return equal weights that maintain gradient flow
-                n_assets = self.n_y
-                # Create equal weights by scaling the input tensor to maintain gradient connection
-                # This ensures the weights are part of the computation graph
-                if y_hat.dim() == 1:
-                    # For 1D tensors, scale the entire tensor
-                    equal_weights = (y_hat * 0.0) + (1.0 / n_assets)
-                else:
-                    # For 2D tensors, scale the first row
-                    equal_weights = (y_hat[0, :] * 0.0) + (1.0 / n_assets)
-                return equal_weights
+                print(f"Emergency SCS fallback also failed: {e2}")
+            
+            # Ultimate fallback: equal weights
+            print("Using equal weights as ultimate fallback")
+            n_assets = self.n_y
+            if y_hat.dim() == 1:
+                equal_weights = (y_hat * 0.0) + (1.0 / n_assets)
+            else:
+                equal_weights = (y_hat[0, :] * 0.0) + (1.0 / n_assets)
+            return equal_weights
 
     #-----------------------------------------------------------------------------------------------
     # net_test: Test the e2e neural net
