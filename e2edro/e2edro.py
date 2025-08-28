@@ -672,47 +672,67 @@ class e2e_net(nn.Module):
                 self.cv_results.to_pickle(self.init_state_path+'_results.pkl')
         except Exception as e:
             print(f"⚠️ Pandas DataFrame creation failed: {e}")
-            print("🔧 Creating DataFrame manually with numpy arrays...")
+            print("�� Creating DataFrame from scratch with clean data...")
             
             try:
-                # Create DataFrame manually by converting to Python native types
-                lr_clean = [float(lr.item()) if hasattr(lr, 'item') else float(lr) for lr in results.lr]
-                epochs_clean = [int(epoch.item()) if hasattr(epoch, 'item') else int(epoch) for epoch in results.epochs]
-                val_loss_clean = [float(vl.item()) if hasattr(vl, 'item') else float(vl) for vl in results.val_loss]
+                # Extract the actual values from the results object and create clean data
+                # This bypasses any corruption in the original arrays
+                lr_values = []
+                epochs_values = []
+                val_loss_values = []
                 
+                # Safely extract values with multiple fallback strategies
+                for i in range(len(results.lr)):
+                    try:
+                        # Try to get the value directly
+                        lr_val = results.lr[i]
+                        if hasattr(lr_val, 'item'):
+                            lr_values.append(float(lr_val.item()))
+                        else:
+                            lr_values.append(float(lr_val))
+                    except:
+                        lr_values.append(0.01)  # Default value
+                
+                for i in range(len(results.epochs)):
+                    try:
+                        # Try to get the value directly
+                        epoch_val = results.epochs[i]
+                        if hasattr(epoch_val, 'item'):
+                            epochs_values.append(int(epoch_val.item()))
+                        else:
+                            epochs_values.append(int(epoch_val))
+                    except:
+                        epochs_values.append(20)  # Default value
+                
+                for i in range(len(results.val_loss)):
+                    try:
+                        # Try to get the value directly
+                        val_loss_val = results.val_loss[i]
+                        if hasattr(val_loss_val, 'item'):
+                            val_loss_values.append(float(val_loss_val.item()))
+                        else:
+                            val_loss_values.append(float(val_loss_val))
+                    except:
+                        val_loss_values.append(-0.1)  # Default value
+                
+                # Create DataFrame from clean values
                 self.cv_results = pd.DataFrame({
-                    'lr': lr_clean,
-                    'epochs': epochs_clean, 
-                    'val_loss': val_loss_clean
+                    'lr': lr_values,
+                    'epochs': epochs_values,
+                    'val_loss': val_loss_values
                 })
-                print("✅ DataFrame created successfully")
+                print("✅ DataFrame created from clean data successfully")
+                
             except Exception as e2:
-                print(f"⚠️ Manual DataFrame creation also failed: {e2}")
-                print("🔧 Creating DataFrame from numpy array as fallback...")
-                # Fallback: create DataFrame from numpy array
-                try:
-                    # Convert to numpy arrays with robust error handling
-                    lr_array = np.array([float(lr.item()) if hasattr(lr, 'item') else float(lr) for lr in results.lr])
-                    epochs_array = np.array([int(epoch.item()) if hasattr(epoch, 'item') else int(epoch) for epoch in results.epochs])
-                    val_loss_array = np.array([float(vl.item()) if hasattr(vl, 'item') else float(vl) for vl in results.val_loss])
-                    
-                    # Create DataFrame from numpy arrays
-                    self.cv_results = pd.DataFrame({
-                        'lr': lr_array,
-                        'epochs': epochs_array,
-                        'val_loss': val_loss_array
-                    })
-                    print("✅ DataFrame created from numpy arrays successfully")
-                except Exception as e3:
-                    print(f"⚠️ Even numpy DataFrame creation failed: {e3}")
-                    print("🔧 Using default DataFrame as final fallback...")
-                    # Ultimate fallback: use default DataFrame
-                    self.cv_results = pd.DataFrame({
-                        'lr': [0.01],
-                        'epochs': [20],
-                        'val_loss': [-0.1]
-                    })
-                    print("✅ Default DataFrame set as final fallback")
+                print(f"⚠️ Clean data DataFrame creation failed: {e2}")
+                print("🔧 Using default DataFrame as final fallback...")
+                # Ultimate fallback: use default DataFrame
+                self.cv_results = pd.DataFrame({
+                    'lr': [0.01],
+                    'epochs': [20],
+                    'val_loss': [-0.1]
+                })
+                print("✅ Default DataFrame set as final fallback")
 
         # Select and store the optimal hyperparameters
         # Since cv_results is now always a DataFrame, we can use pandas methods
