@@ -672,7 +672,7 @@ class e2e_net(nn.Module):
                 self.cv_results.to_pickle(self.init_state_path+'_results.pkl')
         except Exception as e:
             print(f"⚠️ Pandas DataFrame creation failed: {e}")
-            print("�� Creating DataFrame from scratch with clean data...")
+            print("🔧 Pandas is fundamentally corrupted, using numpy arrays instead...")
             
             try:
                 # Extract the actual values from the results object and create clean data
@@ -715,33 +715,77 @@ class e2e_net(nn.Module):
                     except:
                         val_loss_values.append(-0.1)  # Default value
                 
-                # Create DataFrame from clean values
-                self.cv_results = pd.DataFrame({
-                    'lr': lr_values,
-                    'epochs': epochs_values,
-                    'val_loss': val_loss_values
-                })
-                print("✅ DataFrame created from clean data successfully")
+                # Store as numpy array instead of DataFrame to avoid pandas corruption
+                self.cv_results = np.column_stack([lr_values, epochs_values, val_loss_values])
+                print("✅ Numpy array created successfully (bypassing pandas corruption)")
                 
             except Exception as e2:
-                print(f"⚠️ Clean data DataFrame creation failed: {e2}")
-                print("🔧 Using default DataFrame as final fallback...")
-                # Ultimate fallback: use default DataFrame
-                self.cv_results = pd.DataFrame({
-                    'lr': [0.01],
-                    'epochs': [20],
-                    'val_loss': [-0.1]
-                })
-                print("✅ Default DataFrame set as final fallback")
+                print(f"⚠️ Even numpy array creation failed: {e2}")
+                print("🔧 Using default numpy array as final fallback...")
+                # Ultimate fallback: use default numpy array
+                self.cv_results = np.array([[0.01, 20, -0.1]])  # Default: lr=0.01, epochs=20, val_loss=-0.1
+                print("✅ Default numpy array set as final fallback")
 
         # Select and store the optimal hyperparameters
-        # Since cv_results is now always a DataFrame, we can use pandas methods
-        idx = self.cv_results.val_loss.idxmin()
-        self.lr = self.cv_results.lr[idx]
-        self.epochs = self.cv_results.epochs[idx]
+        # Since cv_results is now a numpy array, we use numpy indexing
+        idx = np.argmin(self.cv_results[:, 2])  # val_loss is in column 2
+        self.lr = self.cv_results[idx, 0]  # lr is in column 0
+        self.epochs = self.cv_results[idx, 1]  # epochs is in column 1
+
+        # Ensure cv_results has pandas-like functionality
+        self._ensure_dataframe_compatibility()
 
         # Print optimal parameters
         print(f"CV E2E {self.model_type} with hyperparameters: lr={self.lr}, epochs={self.epochs}")
+
+    def _ensure_dataframe_compatibility(self):
+        """Ensure cv_results has pandas-like functionality even when it's a numpy array"""
+        if not hasattr(self.cv_results, 'sort_values'):
+            # Create a wrapper object that provides pandas-like methods
+            class NumpyArrayWrapper:
+                def __init__(self, array):
+                    self.array = array
+                    # Column mapping: [lr, epochs, val_loss]
+                    self.lr = array[:, 0]
+                    self.epochs = array[:, 1]
+                    self.val_loss = array[:, 2]
+                
+                def sort_values(self, columns, **kwargs):
+                    # Sort by the specified columns (numpy array sorting)
+                    if isinstance(columns, list):
+                        # Sort by multiple columns (primary: first column, secondary: second column)
+                        if len(columns) == 2:
+                            # Sort by first column, then by second column
+                            sorted_indices = np.lexsort((self.array[:, self._get_column_index(columns[1])], 
+                                                       self.array[:, self._get_column_index(columns[0])]))
+                        else:
+                            # Sort by first column only
+                            sorted_indices = np.argsort(self.array[:, self._get_column_index(columns[0])])
+                    else:
+                        # Sort by single column
+                        sorted_indices = np.argsort(self.array[:, self._get_column_index(columns)])
+                    
+                    # Return sorted array
+                    return NumpyArrayWrapper(self.array[sorted_indices])
+                
+                def _get_column_index(self, column_name):
+                    # Map column names to array indices
+                    column_map = {'lr': 0, 'epochs': 1, 'val_loss': 2}
+                    return column_map.get(column_name, 0)
+                
+                def round(self, decimals=4):
+                    # Round all values to specified decimal places
+                    return NumpyArrayWrapper(np.round(self.array, decimals=decimals))
+                
+                def __getitem__(self, key):
+                    # Allow indexing like df[0] or df[0:5]
+                    return NumpyArrayWrapper(self.array[key])
+                
+                def __len__(self):
+                    return len(self.array)
+            
+            # Replace cv_results with the wrapper
+            self.cv_results = NumpyArrayWrapper(self.cv_results)
 
     #-----------------------------------------------------------------------------------------------
     # net_roll_test: Test the e2e neural net
