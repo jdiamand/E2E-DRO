@@ -897,7 +897,11 @@ class e2e_net(nn.Module):
     def _solve_cvxpy_nominal(self, ep, y_hat, gamma, solver_args):
         """Solve nominal optimization problem using CVXPY directly"""
         # Set parameter values
-        self.nom_y_hat_param.value = y_hat.detach().cpu().numpy()
+        # Ensure y_hat is in row vector format (1, n_y) for CVXPY
+        y_hat_np = y_hat.detach().cpu().numpy()
+        if y_hat_np.ndim == 1:
+            y_hat_np = y_hat_np.reshape(1, -1)  # Reshape to (1, n_y)
+        self.nom_y_hat_param.value = y_hat_np
         self.nom_ep_param.value = ep.detach().cpu().numpy()
         self.nom_gamma_param.value = gamma.item()
         
@@ -922,7 +926,11 @@ class e2e_net(nn.Module):
     def _solve_cvxpy_dro(self, ep, y_hat, gamma, delta, solver_args):
         """Solve distributionally robust optimization problem using CVXPY directly"""
         # Set parameter values
-        self.dro_y_hat_param.value = y_hat.detach().cpu().numpy()
+        # Ensure y_hat is in row vector format (1, n_y) for CVXPY
+        y_hat_np = y_hat.detach().cpu().numpy()
+        if y_hat_np.ndim == 1:
+            y_hat_np = y_hat_np.reshape(1, -1)  # Reshape to (1, n_y)
+        self.dro_y_hat_param.value = y_hat_np
         self.dro_ep_param.value = ep.detach().cpu().numpy()
         self.dro_gamma_param.value = gamma.item()
         self.dro_delta_param.value = delta.item()
