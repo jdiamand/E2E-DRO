@@ -198,7 +198,11 @@ class pred_then_opt(nn.Module):
         problem, z, y_hat_param, ep_param, gamma_param = e2e.nominal(self.n_y, self.n_obs, self.prisk)
         
         # Set parameter values
-        y_hat_param.value = y_hat.detach().cpu().numpy()
+        # Ensure y_hat is in row vector format (1, n_y) for CVXPY
+        y_hat_np = y_hat.detach().cpu().numpy()
+        if y_hat_np.ndim == 1:
+            y_hat_np = y_hat_np.reshape(1, -1)  # Reshape to (1, n_y)
+        y_hat_param.value = y_hat_np
         ep_param.value = ep.detach().cpu().numpy()
         # Extract scalar value from gamma tensor
         gamma_param.value = gamma.detach().cpu().numpy().item()
@@ -264,7 +268,11 @@ class pred_then_opt(nn.Module):
         problem, z, y_hat_param, ep_param, gamma_param, delta_param = e2e.hellinger(self.n_y, self.n_obs, self.prisk)
         
         # Set parameter values
-        y_hat_param.value = y_hat.detach().cpu().numpy()
+        # Ensure y_hat is in row vector format (1, n_y) for CVXPY
+        y_hat_np = y_hat.detach().cpu().numpy()
+        if y_hat_np.ndim == 1:
+            y_hat_np = y_hat_np.reshape(1, -1)  # Reshape to (1, n_y)
+        y_hat_param.value = y_hat_np
         ep_param.value = ep.detach().cpu().numpy()
         # Extract scalar value from gamma tensor
         gamma_param.value = gamma.detach().cpu().numpy().item()

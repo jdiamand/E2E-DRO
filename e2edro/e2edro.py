@@ -70,7 +70,7 @@ def base_mod(n_y, n_obs, prisk):
     z = cp.Variable((n_y,1), nonneg=True)
 
     # Parameters
-    y_hat = cp.Parameter(n_y)
+    y_hat = cp.Parameter((1, n_y))  # Row vector for matrix multiplication
     
     # Constraints
     constraints = [cp.sum(z) == 1]
@@ -128,7 +128,7 @@ def nominal(n_y, n_obs, prisk):
 
     # Parameters
     ep = cp.Parameter((n_obs, n_y))
-    y_hat = cp.Parameter(n_y)
+    y_hat = cp.Parameter((1, n_y))  # Row vector for matrix multiplication
     gamma = cp.Parameter(nonneg=True)
     
     # Constraints
@@ -199,7 +199,7 @@ def tv(n_y, n_obs, prisk):
 
     # Parameters
     ep = cp.Parameter((n_obs, n_y))
-    y_hat = cp.Parameter(n_y)
+    y_hat = cp.Parameter((1, n_y))  # Row vector for matrix multiplication
     gamma = cp.Parameter(nonneg=True)
     delta = cp.Parameter(nonneg=True)
     
@@ -276,7 +276,7 @@ def hellinger(n_y, n_obs, prisk):
 
     # Parameters
     ep = cp.Parameter((n_obs, n_y))
-    y_hat = cp.Parameter(n_y)
+    y_hat = cp.Parameter((1, n_y))  # Row vector for matrix multiplication
     gamma = cp.Parameter(nonneg=True)
     delta = cp.Parameter(nonneg=True)
 
