@@ -21,6 +21,11 @@ def single_period_loss(z_star, y_perf):
     Output
     loss: realized return at time 't' 
     """
+    # Ensure inputs maintain gradient flow
+    if not z_star.requires_grad:
+        z_star = z_star.detach().requires_grad_(True)
+    
+    # Compute loss (negative return for minimization)
     loss = -y_perf[0] @ z_star 
     return loss
 
@@ -37,7 +42,22 @@ def single_period_over_var_loss(z_star, y_perf):
     Output
     loss: realized return at time 't' over realized volatility from 't' to 't + perf_period'
     """
-    loss = -y_perf[0] @ z_star / torch.std(y_perf @ z_star)
+    # Ensure inputs maintain gradient flow
+    if not z_star.requires_grad:
+        z_star = z_star.detach().requires_grad_(True)
+    
+    # Compute portfolio returns
+    portfolio_returns = y_perf @ z_star
+    
+    # Compute standard deviation with numerical stability
+    std_return = torch.std(portfolio_returns)
+    
+    # Add small epsilon to prevent division by zero and maintain numerical stability
+    epsilon = 1e-8
+    std_return = std_return + epsilon
+    
+    # Compute loss (negative return over volatility)
+    loss = -y_perf[0] @ z_star / std_return
     return loss
 
 def sharpe_loss(z_star, y_perf):
@@ -54,5 +74,22 @@ def sharpe_loss(z_star, y_perf):
     Output
     loss: realized average return over realized volatility from 't' to 't + perf_period'
     """
-    loss = -torch.mean(y_perf @ z_star) / torch.std(y_perf @ z_star)
+    # Ensure inputs maintain gradient flow
+    if not z_star.requires_grad:
+        z_star = z_star.detach().requires_grad_(True)
+    
+    # Compute portfolio returns
+    portfolio_returns = y_perf @ z_star
+    
+    # Compute mean and standard deviation with numerical stability
+    mean_return = torch.mean(portfolio_returns)
+    std_return = torch.std(portfolio_returns)
+    
+    # Add small epsilon to prevent division by zero and maintain numerical stability
+    epsilon = 1e-8
+    std_return = std_return + epsilon
+    
+    # Compute Sharpe ratio (negative for minimization)
+    loss = -mean_return / std_return
+    
     return loss
