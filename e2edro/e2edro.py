@@ -870,7 +870,11 @@ class e2e_net(nn.Module):
     def _solve_cvxpy_base(self, y_hat, solver_args):
         """Solve base optimization problem using CVXPY directly"""
         # Set parameter values
-        self.base_y_hat_param.value = y_hat.detach().cpu().numpy()
+        # Ensure y_hat is in row vector format (1, n_y) for CVXPY
+        y_hat_np = y_hat.detach().cpu().numpy()
+        if y_hat_np.ndim == 1:
+            y_hat_np = y_hat_np.reshape(1, -1)  # Reshape to (1, n_y)
+        self.base_y_hat_param.value = y_hat_np
         
         # Solve the problem
         try:
