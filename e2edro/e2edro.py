@@ -688,34 +688,37 @@ class e2e_net(nn.Module):
                 print("✅ DataFrame created successfully")
             except Exception as e2:
                 print(f"⚠️ Manual DataFrame creation also failed: {e2}")
-                print("🔧 Storing results as numpy array instead...")
-                # Final fallback: store as numpy array
+                print("🔧 Creating DataFrame from numpy array as fallback...")
+                # Fallback: create DataFrame from numpy array
                 try:
                     # Convert to numpy arrays with robust error handling
                     lr_array = np.array([float(lr.item()) if hasattr(lr, 'item') else float(lr) for lr in results.lr])
                     epochs_array = np.array([int(epoch.item()) if hasattr(epoch, 'item') else int(epoch) for epoch in results.epochs])
                     val_loss_array = np.array([float(vl.item()) if hasattr(vl, 'item') else float(vl) for vl in results.val_loss])
                     
-                    self.cv_results = np.column_stack([lr_array, epochs_array, val_loss_array])
-                    print("✅ Numpy array created successfully")
+                    # Create DataFrame from numpy arrays
+                    self.cv_results = pd.DataFrame({
+                        'lr': lr_array,
+                        'epochs': epochs_array,
+                        'val_loss': val_loss_array
+                    })
+                    print("✅ DataFrame created from numpy arrays successfully")
                 except Exception as e3:
-                    print(f"⚠️ Even numpy conversion failed: {e3}")
-                    print("🔧 Using default values as final fallback...")
-                    # Ultimate fallback: use default values
-                    self.cv_results = np.array([[0.01, 20, -0.1]])  # Default: lr=0.01, epochs=20, val_loss=-0.1
-                    print("✅ Default values set as final fallback")
+                    print(f"⚠️ Even numpy DataFrame creation failed: {e3}")
+                    print("🔧 Using default DataFrame as final fallback...")
+                    # Ultimate fallback: use default DataFrame
+                    self.cv_results = pd.DataFrame({
+                        'lr': [0.01],
+                        'epochs': [20],
+                        'val_loss': [-0.1]
+                    })
+                    print("✅ Default DataFrame set as final fallback")
 
         # Select and store the optimal hyperparameters
-        if hasattr(self.cv_results, 'val_loss'):
-            # It's a pandas DataFrame
-            idx = self.cv_results.val_loss.idxmin()
-            self.lr = self.cv_results.lr[idx]
-            self.epochs = self.cv_results.epochs[idx]
-        else:
-            # It's a numpy array
-            idx = np.argmin(self.cv_results[:, 2])  # val_loss is in column 2
-            self.lr = self.cv_results[idx, 0]  # lr is in column 0
-            self.epochs = self.cv_results[idx, 1]  # epochs is in column 1
+        # Since cv_results is now always a DataFrame, we can use pandas methods
+        idx = self.cv_results.val_loss.idxmin()
+        self.lr = self.cv_results.lr[idx]
+        self.epochs = self.cv_results.epochs[idx]
 
         # Print optimal parameters
         print(f"CV E2E {self.model_type} with hyperparameters: lr={self.lr}, epochs={self.epochs}")
