@@ -333,6 +333,11 @@ class NumpyArrayWrapper:
         # Round all values to specified decimal places
         return NumpyArrayWrapper(np.round(self.array, decimals=decimals))
     
+    def reset_index(self, drop=True):
+        # Reset index method for pandas compatibility
+        # Since we're using numpy arrays, this just returns self
+        return self
+    
     def __getitem__(self, key):
         # Allow indexing like df[0] or df[0:5]
         return NumpyArrayWrapper(self.array[key])
