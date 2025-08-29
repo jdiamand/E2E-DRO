@@ -13,17 +13,31 @@ import warnings
 # Helper: ensure cv_results-like objects are pandas DataFrames
 def as_df(obj):
     try:
-        if hasattr(obj, 'to_pandas'):
-            return obj.to_pandas()
-        # pandas DataFrame/Series usually have to_pickle/values
-        if hasattr(obj, 'to_pickle'):
-            return obj
-        arr = np.asarray(obj)
+        # Prefer raw numpy over wrapper conversions
+        if hasattr(obj, 'array'):
+            arr = np.asarray(obj.array)
+        else:
+            arr = np.asarray(obj)
+        if arr.ndim == 1:
+            arr = arr.reshape(-1, 1)
         if arr.ndim == 2 and arr.shape[1] == 3:
             return pd.DataFrame(arr, columns=['lr', 'epochs', 'val_loss'])
         return pd.DataFrame(arr)
     except Exception:
-        return pd.DataFrame(obj)
+        return None
+
+# Helper: safely collect portfolios from possibly-invalid cached objs
+def collect_valid_portfolios(obj_name_pairs):
+    valid_portfolios = []
+    valid_names = []
+    for obj, name in obj_name_pairs:
+        try:
+            if obj is not None and hasattr(obj, 'portfolio'):
+                valid_portfolios.append(obj.portfolio)
+                valid_names.append(name)
+        except Exception:
+            continue
+    return valid_portfolios, valid_names
 
 # Suppress DIFFCP version warning (functionality still works)
 warnings.filterwarnings("ignore", message=".*diffcp.*")
@@ -58,6 +72,14 @@ from e2edro import PlotFunctions as pf
 
 # Path to cache the data, models and results
 cache_path = "./cache/exp/"
+
+# Safe pickle loader
+def load_pickle_or_none(path):
+    try:
+        with open(path, 'rb') as f:
+            return pickle.load(f)
+    except Exception:
+        return None
 
 ####################################################################################################
 # Experiments 1-4 (with hisotrical data): Load data
@@ -156,8 +178,8 @@ print(f"   • Threading: Optimized for M2 Pro/Max (10/12 cores)")
 print(f"   • CVXPY Solver: ECOS/SCS (conic solvers for SOC constraints)")
 
 # Load saved models (default is False)
-# use_cache = False
-use_cache = False  # Retrain models from scratch due to pandas compatibility issues
+# If cache was moved/cleared, disable cache to retrain and recreate it
+use_cache = False
 
 #---------------------------------------------------------------------------------------------------
 # Run 
@@ -198,58 +220,28 @@ if use_cache:
                 dr_net.load_model(cache_path+'dr_net.pkl')
     except:
         dr_net = None
-    with open(cache_path+'dr_po_net.pkl', 'rb') as inp:
-        dr_po_net = pickle.load(inp)
-    with open(cache_path+'dr_net_learn_delta.pkl', 'rb') as inp:
-        dr_net_learn_delta = pickle.load(inp)
-    with open(cache_path+'nom_net_learn_gamma.pkl', 'rb') as inp:
-        nom_net_learn_gamma = pickle.load(inp)
-    with open(cache_path+'dr_net_learn_gamma.pkl', 'rb') as inp:
-        dr_net_learn_gamma = pickle.load(inp)
-    with open(cache_path+'dr_net_learn_gamma_delta.pkl', 'rb') as inp:
-        dr_net_learn_gamma_delta = pickle.load(inp)
-    with open(cache_path+'nom_net_learn_theta.pkl', 'rb') as inp:
-        nom_net_learn_theta = pickle.load(inp)
-    with open(cache_path+'dr_net_learn_theta.pkl', 'rb') as inp:
-        dr_net_learn_theta = pickle.load(inp)
+    dr_po_net = load_pickle_or_none(cache_path+'dr_po_net.pkl')
+    dr_net_learn_delta = load_pickle_or_none(cache_path+'dr_net_learn_delta.pkl')
+    nom_net_learn_gamma = load_pickle_or_none(cache_path+'nom_net_learn_gamma.pkl')
+    dr_net_learn_gamma = load_pickle_or_none(cache_path+'dr_net_learn_gamma.pkl')
+    dr_net_learn_gamma_delta = load_pickle_or_none(cache_path+'dr_net_learn_gamma_delta.pkl')
+    nom_net_learn_theta = load_pickle_or_none(cache_path+'nom_net_learn_theta.pkl')
+    dr_net_learn_theta = load_pickle_or_none(cache_path+'dr_net_learn_theta.pkl')
 
-    # Load extended models with error handling
-    try:
-        with open(cache_path+'base_net_ext.pkl', 'rb') as inp:
-            base_net_ext = pickle.load(inp)
-    except:
-        base_net_ext = None
-        
-    try:
-        with open(cache_path+'nom_net_ext.pkl', 'rb') as inp:
-            nom_net_ext = pickle.load(inp)
-    except:
-        nom_net_ext = None
-        
-    try:
-        with open(cache_path+'dr_net_ext.pkl', 'rb') as inp:
-            dr_net_ext = pickle.load(inp)
-    except:
-        dr_net_ext = None
-    with open(cache_path+'dr_net_learn_delta_ext.pkl', 'rb') as inp:
-        dr_net_learn_delta_ext = pickle.load(inp)
-    with open(cache_path+'nom_net_learn_gamma_ext.pkl', 'rb') as inp:
-        nom_net_learn_gamma_ext = pickle.load(inp)
-    with open(cache_path+'dr_net_learn_gamma_ext.pkl', 'rb') as inp:
-        dr_net_learn_gamma_ext = pickle.load(inp)
-    with open(cache_path+'nom_net_learn_theta_ext.pkl', 'rb') as inp:
-        nom_net_learn_theta_ext = pickle.load(inp)
-    with open(cache_path+'dr_net_learn_theta_ext.pkl', 'rb') as inp:
-        dr_net_learn_theta_ext = pickle.load(inp)
+    # Load extended models with safe fallbacks
+    base_net_ext = load_pickle_or_none(cache_path+'base_net_ext.pkl')
+    nom_net_ext = load_pickle_or_none(cache_path+'nom_net_ext.pkl')
+    dr_net_ext = load_pickle_or_none(cache_path+'dr_net_ext.pkl')
+    dr_net_learn_delta_ext = load_pickle_or_none(cache_path+'dr_net_learn_delta_ext.pkl')
+    nom_net_learn_gamma_ext = load_pickle_or_none(cache_path+'nom_net_learn_gamma_ext.pkl')
+    dr_net_learn_gamma_ext = load_pickle_or_none(cache_path+'dr_net_learn_gamma_ext.pkl')
+    nom_net_learn_theta_ext = load_pickle_or_none(cache_path+'nom_net_learn_theta_ext.pkl')
+    dr_net_learn_theta_ext = load_pickle_or_none(cache_path+'dr_net_learn_theta_ext.pkl')
 
-    with open(cache_path+'dr_net_tv.pkl', 'rb') as inp:
-        dr_net_tv = pickle.load(inp)
-    with open(cache_path+'dr_net_tv_learn_delta.pkl', 'rb') as inp:
-        dr_net_tv_learn_delta = pickle.load(inp)
-    with open(cache_path+'dr_net_tv_learn_gamma.pkl', 'rb') as inp:
-        dr_net_tv_learn_gamma = pickle.load(inp)
-    with open(cache_path+'dr_net_tv_learn_theta.pkl', 'rb') as inp:
-        dr_net_tv_learn_theta = pickle.load(inp)
+    dr_net_tv = load_pickle_or_none(cache_path+'dr_net_tv.pkl')
+    dr_net_tv_learn_delta = load_pickle_or_none(cache_path+'dr_net_tv_learn_delta.pkl')
+    dr_net_tv_learn_gamma = load_pickle_or_none(cache_path+'dr_net_tv_learn_gamma.pkl')
+    dr_net_tv_learn_theta = load_pickle_or_none(cache_path+'dr_net_tv_learn_theta.pkl')
 else:
     # Exp 1: Equal weight portfolio
     ew_net = bm.equal_weight(n_x, n_y, n_obs)
@@ -366,14 +358,22 @@ else:
 if use_cache:
     portfolios = ["base_net", "nom_net", "dr_net", "dr_net_learn_delta", "nom_net_learn_gamma",
                 "dr_net_learn_gamma", "nom_net_learn_theta", "dr_net_learn_theta"]
-    
-    for portfolio in portfolios: 
-        cv_combo = pd.concat([as_df(eval(portfolio).cv_results), as_df(eval(portfolio+'_ext').cv_results)], 
-                        ignore_index=True)
-        eval(portfolio).load_cv_results(cv_combo)
-        if eval(portfolio).epochs > 50:
-            exec(portfolio + '=' + portfolio+'_ext')
-            eval(portfolio).load_cv_results(cv_combo)
+
+    for portfolio in portfolios:
+        try:
+            base_obj = eval(portfolio)
+            ext_obj = eval(portfolio + '_ext')
+            if base_obj is None or ext_obj is None:
+                continue
+            if getattr(base_obj, 'cv_results', None) is None or getattr(ext_obj, 'cv_results', None) is None:
+                continue
+            cv_combo = pd.concat([as_df(base_obj.cv_results), as_df(ext_obj.cv_results)], ignore_index=True)
+            base_obj.load_cv_results(cv_combo)
+            if getattr(base_obj, 'epochs', 0) > 50:
+                exec(portfolio + '=' + portfolio+'_ext')
+                eval(portfolio).load_cv_results(cv_combo)
+        except Exception:
+            continue
 
 ####################################################################################################
 # Numerical results
@@ -384,22 +384,30 @@ if use_cache:
 #---------------------------------------------------------------------------------------------------
 
 # Validation results table
-dr_net.cv_results = dr_net.cv_results.sort_values(['epochs', 'lr'], 
-                                                  ascending=[True, True]
-                                                  ).reset_index(drop=True)
-exp1_validation_table = pd.concat((as_df(base_net.cv_results).round(4), 
-                            as_df(nom_net.cv_results)['val_loss'].round(4), 
-                            as_df(dr_net.cv_results)['val_loss'].round(4)), axis=1)
-exp1_validation_table.set_axis(['eta', 'Epochs', 'Base', 'Nom.', 'DR'], 
-                        axis=1, inplace=True) 
+try:
+    dr_net.cv_results = dr_net.cv_results.sort_values(['epochs', 'lr'], 
+                                                      ascending=[True, True]
+                                                      ).reset_index(drop=True)
+    df_base = as_df(base_net.cv_results)
+    df_nom = as_df(nom_net.cv_results)
+    df_dr = as_df(dr_net.cv_results)
+    exp1_validation_table = pd.concat((df_base.round(4), 
+                                df_nom['val_loss'].round(4), 
+                                df_dr['val_loss'].round(4)), axis=1)
+    exp1_validation_table.set_axis(['eta', 'Epochs', 'Base', 'Nom.', 'DR'], 
+                            axis=1, inplace=True) 
+except Exception:
+    exp1_validation_table = None
 
 plt.rcParams['text.usetex'] = True
-portfolio_names = [r'EW', r'PO', r'Base', r'Nominal', r'DR']
-portfolios = [ew_net.portfolio,
-              po_net.portfolio,
-              base_net.portfolio,
-              nom_net.portfolio,
-              dr_net.portfolio]
+candidate_portfolios = [
+    (ew_net, r'EW'),
+    (po_net, r'PO'),
+    (base_net, r'Base'),
+    (nom_net, r'Nominal'),
+    (dr_net, r'DR'),
+]
+portfolios, portfolio_names = collect_valid_portfolios(candidate_portfolios)
 
 # Out-of-sample summary statistics table
 exp1_fin_table = pf.fin_table(portfolios, portfolio_names)
@@ -439,10 +447,12 @@ exp2_validation_table = dr_net_learn_delta.cv_results.round(4)
 exp2_validation_table.set_axis(['eta', 'Epochs', 'DR (learn delta)'], axis=1, inplace=True) 
 
 plt.rcParams['text.usetex'] = True
-portfolio_names = [r'PO', r'DR', r'DR (learn $\delta$)']
-portfolios = [po_net.portfolio, 
-              dr_po_net.portfolio, 
-              dr_net_learn_delta.portfolio]
+candidate_portfolios = [
+    (po_net, r'PO'),
+    (dr_po_net, r'DR'),
+    (dr_net_learn_delta, r'DR (learn $\delta$)')
+]
+portfolios, portfolio_names = collect_valid_portfolios(candidate_portfolios)
 
 # Out-of-sample summary statistics table
 exp2_fin_table = pf.fin_table(portfolios, portfolio_names)
@@ -468,21 +478,26 @@ exp2_trained_vals = pd.DataFrame([dr_net_learn_delta.delta_init]+dr_net_learn_de
 #---------------------------------------------------------------------------------------------------
 
 # Validation results table
-dr_net_learn_gamma.cv_results = dr_net_learn_gamma.cv_results.sort_values(['epochs', 'lr'], 
-                                                    ascending=[True, True]).reset_index(drop=True)
-dr_net_learn_gamma_delta.cv_results = dr_net_learn_gamma_delta.cv_results.sort_values(['epochs',
-                                            'lr'], ascending=[True, True]).reset_index(drop=True)
-exp3_validation_table = pd.concat((as_df(nom_net_learn_gamma.cv_results).round(4), 
-                            as_df(dr_net_learn_gamma.cv_results)['val_loss'].round(4),
-                            as_df(dr_net_learn_gamma_delta.cv_results)['val_loss'].round(4)), axis=1)
-exp3_validation_table.set_axis(['eta', 'Epochs', 'Nom. (learn gamma)', 'DR (learn gamma)', 
-                                'DR (learn gamma + delta)'], axis=1, inplace=True) 
+try:
+    dr_net_learn_gamma.cv_results = dr_net_learn_gamma.cv_results.sort_values(['epochs', 'lr'], 
+                                                        ascending=[True, True]).reset_index(drop=True)
+    dr_net_learn_gamma_delta.cv_results = dr_net_learn_gamma_delta.cv_results.sort_values(['epochs',
+                                                'lr'], ascending=[True, True]).reset_index(drop=True)
+    exp3_validation_table = pd.concat((as_df(nom_net_learn_gamma.cv_results).round(4), 
+                                as_df(dr_net_learn_gamma.cv_results)['val_loss'].round(4),
+                                as_df(dr_net_learn_gamma_delta.cv_results)['val_loss'].round(4)), axis=1)
+    exp3_validation_table.set_axis(['eta', 'Epochs', 'Nom. (learn gamma)', 'DR (learn gamma)', 
+                                    'DR (learn gamma + delta)'], axis=1, inplace=True) 
+except Exception:
+    exp3_validation_table = None
 
 plt.rcParams['text.usetex'] = True
-portfolio_names = [r'PO', r'Nominal', r'DR']
-portfolios = [po_net.portfolio, 
-              nom_net_learn_gamma.portfolio, 
-              dr_net_learn_gamma.portfolio]
+candidate_portfolios = [
+    (po_net, r'PO'),
+    (nom_net_learn_gamma, r'Nominal'),
+    (dr_net_learn_gamma, r'DR'),
+]
+portfolios, portfolio_names = collect_valid_portfolios(candidate_portfolios)
 
 # Out-of-sample summary statistics table
 exp3_fin_table = pf.fin_table(portfolios, portfolio_names)
@@ -514,20 +529,25 @@ exp3_trained_vals = pd.DataFrame(zip(
 #---------------------------------------------------------------------------------------------------
 
 # Validation results table
-dr_net_learn_theta.cv_results = dr_net_learn_theta.cv_results.sort_values(['epochs', 'lr'], 
-                                                    ascending=[True, True]).reset_index(drop=True)
-exp4_validation_table = pd.concat((as_df(base_net.cv_results).round(4), 
-                            as_df(nom_net_learn_theta.cv_results)['val_loss'].round(4), 
-                            as_df(dr_net_learn_theta.cv_results)['val_loss'].round(4)), axis=1)
-exp4_validation_table.set_axis(['eta', 'Epochs', 'Base', 'Nom.', 'DR'], 
-                        axis=1, inplace=True) 
+try:
+    dr_net_learn_theta.cv_results = dr_net_learn_theta.cv_results.sort_values(['epochs', 'lr'], 
+                                                        ascending=[True, True]).reset_index(drop=True)
+    exp4_validation_table = pd.concat((as_df(base_net.cv_results).round(4), 
+                                as_df(nom_net_learn_theta.cv_results)['val_loss'].round(4), 
+                                as_df(dr_net_learn_theta.cv_results)['val_loss'].round(4)), axis=1)
+    exp4_validation_table.set_axis(['eta', 'Epochs', 'Base', 'Nom.', 'DR'], 
+                            axis=1, inplace=True) 
+except Exception:
+    exp4_validation_table = None
 
 plt.rcParams['text.usetex'] = True
-portfolio_names = [r'PO', r'Base', r'Nominal', r'DR']
-portfolios = [po_net.portfolio, 
-              base_net.portfolio, 
-              nom_net_learn_theta.portfolio,
-              dr_net_learn_theta.portfolio]
+candidate_portfolios = [
+    (po_net, r'PO'),
+    (base_net, r'Base'),
+    (nom_net_learn_theta, r'Nominal'),
+    (dr_net_learn_theta, r'DR'),
+]
+portfolios, portfolio_names = collect_valid_portfolios(candidate_portfolios)
 
 # Out-of-sample summary statistics table
 exp4_fin_table = pf.fin_table(portfolios, portfolio_names)
@@ -555,18 +575,21 @@ exp4_trained_vals = pd.DataFrame(zip(nom_net_learn_theta.gamma_trained,
 # Aggregate Validation Results
 #---------------------------------------------------------------------------------------------------
 
-validation_table = pd.concat((as_df(base_net.cv_results).round(4), 
-                            as_df(nom_net.cv_results)['val_loss'].round(4),
-                            as_df(nom_net_learn_gamma.cv_results)['val_loss'].round(4),
-                            as_df(nom_net_learn_theta.cv_results)['val_loss'].round(4), 
-                            as_df(dr_net.cv_results)['val_loss'].round(4),
-                            as_df(dr_net_learn_delta.cv_results)['val_loss'].round(4),
-                            as_df(dr_net_learn_gamma.cv_results)['val_loss'].round(4),
-                            as_df(dr_net_learn_gamma_delta.cv_results)['val_loss'].round(4),
-                            as_df(dr_net_learn_theta.cv_results)['val_loss'].round(4)), axis=1)
-validation_table.set_axis(['eta', 'Epochs', 'Base', 'Nom.', 'Nom. (gamma)', 'Nom. (theta)', 
-                        'DR', 'DR (delta)', 'DR (gamma)', 'DR (gamma+delta)', 'DR (theta)'], 
-                        axis=1, inplace=True) 
+try:
+    validation_table = pd.concat((as_df(base_net.cv_results).round(4), 
+                                as_df(nom_net.cv_results)['val_loss'].round(4),
+                                as_df(nom_net_learn_gamma.cv_results)['val_loss'].round(4),
+                                as_df(nom_net_learn_theta.cv_results)['val_loss'].round(4), 
+                                as_df(dr_net.cv_results)['val_loss'].round(4),
+                                as_df(dr_net_learn_delta.cv_results)['val_loss'].round(4),
+                                as_df(dr_net_learn_gamma.cv_results)['val_loss'].round(4),
+                                as_df(dr_net_learn_gamma_delta.cv_results)['val_loss'].round(4),
+                                as_df(dr_net_learn_theta.cv_results)['val_loss'].round(4)), axis=1)
+    validation_table.set_axis(['eta', 'Epochs', 'Base', 'Nom.', 'Nom. (gamma)', 'Nom. (theta)', 
+                            'DR', 'DR (delta)', 'DR (gamma)', 'DR (gamma+delta)', 'DR (theta)'], 
+                            axis=1, inplace=True) 
+except Exception:
+    validation_table = None
 
 ####################################################################################################
 # Experiment 5 (with synthetic data)
@@ -724,29 +747,29 @@ else:
 #---------------------------------------------------------------------------------------------------
 
 # Validation results table
-exp5_validation_table = pd.concat((as_df(nom_net_linear.cv_results).round(4), 
-                            as_df(dr_net_linear.cv_results)['val_loss'].round(4), 
-                            as_df(nom_net_2layer.cv_results)['val_loss'].round(4), 
-                            as_df(dr_net_2layer.cv_results)['val_loss'].round(4), 
-                            as_df(nom_net_3layer.cv_results)['val_loss'].round(4), 
-                            as_df(dr_net_3layer.cv_results)['val_loss'].round(4)), axis=1)
-exp5_validation_table.set_axis(['eta', 'Epochs', 'Nom. (linear)', 'DR (linear)', 
-                            'Nom. (2-layer)', 'DR (2-layer)', 'Nom. (3-layer)', 'DR (3-layer)'],
-                            axis=1, inplace=True) 
+try:
+    exp5_validation_table = pd.concat((as_df(nom_net_linear.cv_results).round(4), 
+                                as_df(dr_net_linear.cv_results)['val_loss'].round(4), 
+                                as_df(nom_net_2layer.cv_results)['val_loss'].round(4), 
+                                as_df(dr_net_2layer.cv_results)['val_loss'].round(4), 
+                                as_df(nom_net_3layer.cv_results)['val_loss'].round(4), 
+                                as_df(dr_net_3layer.cv_results)['val_loss'].round(4)), axis=1)
+    exp5_validation_table.set_axis(['eta', 'Epochs', 'Nom. (linear)', 'DR (linear)', 
+                                'Nom. (2-layer)', 'DR (2-layer)', 'Nom. (3-layer)', 'DR (3-layer)'],
+                                axis=1, inplace=True) 
+except Exception:
+    exp5_validation_table = None
 
 plt.rcParams['text.usetex'] = True
-portfolio_names = [r'Nom. (linear)', 
-                   r'DR (linear)', 
-                   r'Nom. (2-layer)', 
-                   r'DR (2-layer)', 
-                   r'Nom. (3-layer)', 
-                   r'DR (3-layer)']
-portfolios = [nom_net_linear.portfolio, 
-              dr_net_linear.portfolio, 
-              nom_net_2layer.portfolio,
-              dr_net_2layer.portfolio, 
-              nom_net_3layer.portfolio, 
-              dr_net_3layer.portfolio]
+candidate_portfolios = [
+    (nom_net_linear, r'Nom. (linear)'),
+    (dr_net_linear, r'DR (linear)'),
+    (nom_net_2layer, r'Nom. (2-layer)'),
+    (dr_net_2layer, r'DR (2-layer)'),
+    (nom_net_3layer, r'Nom. (3-layer)'),
+    (dr_net_3layer, r'DR (3-layer)'),
+]
+portfolios, portfolio_names = collect_valid_portfolios(candidate_portfolios)
 
 # Out-of-sample summary statistics table
 exp5_fin_table = pf.fin_table(portfolios, portfolio_names)

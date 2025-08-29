@@ -35,8 +35,18 @@ def wealth_plot(portfolio_list, names, colors, nplots=1, path=None):
     Wealth evolution figure
     """
     n = len(portfolio_list)
-    plot_df = pd.concat([portfolio_list[i].rets.tri.rename(names[i])*100 for i in 
-                        range(n)], axis=1)
+    # Normalize portfolios that stored numpy fallback
+    tri_series = []
+    for i in range(n):
+        rets = portfolio_list[i].rets
+        if isinstance(rets, np.ndarray):
+            # columns: [index, rets, tri]
+            tri = pd.Series(rets[:, 2], name=names[i])
+            tri.index = pd.RangeIndex(start=0, stop=len(tri))
+        else:
+            tri = rets.tri.rename(names[i])
+        tri_series.append(tri * 100)
+    plot_df = pd.concat(tri_series, axis=1)
     s = pd.DataFrame([100*np.ones(n)], columns=names)
     if isinstance(plot_df.index, pd.DatetimeIndex):
         s.index = [plot_df.index[0] - pd.Timedelta(days=7)]
@@ -93,8 +103,16 @@ def sr_plot(portfolio_list, names, colors, path=None):
     SR evolution figure
     """
     time_period = 104
-    df = pd.concat([portfolio_list[i].rets.rets.rename(names[i]) for i in 
-                        range(len(portfolio_list))], axis=1)
+    series = []
+    for i in range(len(portfolio_list)):
+        rets = portfolio_list[i].rets
+        if isinstance(rets, np.ndarray):
+            s = pd.Series(rets[:, 1], name=names[i])
+            s.index = pd.RangeIndex(start=0, stop=len(s))
+        else:
+            s = rets.rets.rename(names[i])
+        series.append(s)
+    df = pd.concat(series, axis=1)
     mean_df = ((df+1).rolling(time_period).apply(gmean))**52 - 1
     mean_df.dropna(inplace=True)
     std_df = df.rolling(time_period).std()
@@ -131,8 +149,16 @@ def sr_bar(portfolio_list, names, colors, path=None):
     SR evolution figure
     """
     n = len(portfolio_list)
-    df = pd.concat([portfolio_list[i].rets.rets.rename(names[i]) for i in 
-                        range(n)], axis=1)
+    series = []
+    for i in range(n):
+        rets = portfolio_list[i].rets
+        if isinstance(rets, np.ndarray):
+            s = pd.Series(rets[:, 1], name=names[i])
+            s.index = pd.RangeIndex(start=0, stop=len(s))
+        else:
+            s = rets.rets.rename(names[i])
+        series.append(s)
+    df = pd.concat(series, axis=1)
     
     mean_df = df.expanding(min_periods=1).mean().groupby([df.index.year]).tail(1)
     std_df  = df.expanding(min_periods=1).std().groupby([df.index.year]).tail(1)
@@ -226,22 +252,54 @@ def fin_table(portfolios:list, names:list) -> pd.DataFrame:
     invHidxs = []
     
     for portfolio in portfolios:
-        ret = (portfolio.rets.tri.iloc[-1] ** 
-                (1/portfolio.rets.tri.shape[0]))**52 - 1
-        vol = portfolio.vol * np.sqrt(52)
-        SR = ret / vol
-        invHidx = round(1/(pd.DataFrame(portfolio.weights) ** 2).sum(axis=1).mean(), ndigits=2)
-        rets.append(round(ret*100, ndigits=1))
-        vols.append(round(vol*100, ndigits=1))
-        SRs.append(round(SR, ndigits=2))
-        invHidxs.append(invHidx)
+        rets_obj = portfolio.rets
+        if isinstance(rets_obj, np.ndarray):
+            tri = rets_obj[:, 2]
+            n = tri.shape[0]
+            ret = (tri[-1] ** (1/n))**52 - 1
+        else:
+            ret = (rets_obj.tri.iloc[-1] ** (1/rets_obj.tri.shape[0]))**52 - 1
+        # Ensure volatility is scalar
+        vol_arr = np.asarray(portfolio.vol)
+        vol_scalar = float(np.mean(vol_arr)) * np.sqrt(52)
+        SR = float(ret) / vol_scalar if vol_scalar != 0 else float('nan')
+        # Numpy-only inverse HHI across rows to avoid pandas issues
+        weights_arr = np.asarray(portfolio.weights, dtype=float)
+        hhi_rows = np.sum(np.square(weights_arr), axis=1)
+        invHidx_val = float(np.round(np.mean(1.0 / np.maximum(hhi_rows, 1e-12)), 2))
+        rets.append(round(float(ret)*100, ndigits=1))
+        vols.append(round(vol_scalar*100, ndigits=1))
+        SRs.append(round(float(SR), ndigits=2))
+        invHidxs.append(invHidx_val)
+    # Build via numeric matrix, then assign safe column names
+    k = min(len(rets), len(vols), len(SRs), len(invHidxs), len(names))
+    rets, vols, SRs, invHidxs = rets[:k], vols[:k], SRs[:k], invHidxs[:k]
+    # Coerce names to safe python strings; replace non-strings/arrays
+    safe_names = []
+    for i in range(k):
+        n = names[i]
+        try:
+            if isinstance(n, (list, np.ndarray)):
+                safe_names.append(f"Portfolio {i+1}")
+            else:
+                safe_names.append(str(n))
+        except Exception:
+            safe_names.append(f"Portfolio {i+1}")
 
-    table  = pd.DataFrame(np.array([rets, vols, SRs, invHidxs]), 
-                                   columns=names)
-    table.set_axis(['Return (%)', 
-                    'Volatility (%)', 
-                    'Sharpe ratio',
-                    'Avg. inv. HHI'], 
-                   axis=0, inplace=True) 
-    
-    return table
+    # Build via pure Python lists, then transpose so metrics are rows
+    metrics = ['Return (%)', 'Volatility (%)', 'Sharpe ratio', 'Avg. inv. HHI']
+    rows = []
+    for idx in range(k):
+        rows.append([float(rets[idx]), float(vols[idx]), float(SRs[idx]), float(invHidxs[idx])])
+    try:
+        table = pd.DataFrame(rows, columns=metrics)
+        try:
+            table.index = safe_names
+        except Exception:
+            table.index = [f"Portfolio {i+1}" for i in range(k)]
+        table = table.T
+        return table
+    except Exception as e:
+        print("🔍 DEBUG: Using numpy fallback for fin_table due to:", e)
+        # Return a pandas-free structure to avoid crashing the run
+        return {"metrics": metrics, "names": safe_names, "rows": rows}

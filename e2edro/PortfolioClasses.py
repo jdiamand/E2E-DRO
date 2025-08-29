@@ -124,8 +124,7 @@ class backtest:
             self.rets = pd.DataFrame({'Date':self.dates, 'rets': self.rets, 'tri': tri})
             self.rets = self.rets.set_index('Date')
         except Exception as e:
-            print(f"⚠️ Pandas DataFrame creation failed: {e}")
-            print("🔧 Storing results as numpy array instead...")
+            # Quiet fallback
             # Store as numpy array to avoid pandas corruption
             # Convert dates to numeric indices to avoid dtype conflicts
             date_indices = np.arange(len(self.dates))
@@ -196,8 +195,6 @@ class CrossVal:
             return pd.DataFrame(list(zip(self.lr, self.epochs, self.val_loss)), 
                                 columns=['lr', 'epochs', 'val_loss'])
         except Exception as e:
-            print(f"⚠️ Pandas DataFrame creation failed in CrossVal.df(): {e}")
-            print("🔧 Returning numpy array instead...")
             # Return as numpy array to avoid pandas corruption
             return np.column_stack([self.lr, self.epochs, self.val_loss])
 

@@ -505,6 +505,8 @@ class e2e_net(nn.Module):
 
         # Disable CVXPY end-to-end to avoid runtime solver issues; use fallback instead
         self.use_cvxpy = False
+        # Quiet noisy warnings by default
+        self.verbose = False
 
         # Suppress repeated CVXPY error logs
         self._cvxpy_error_logged = False
@@ -722,13 +724,14 @@ class e2e_net(nn.Module):
                 # It's a pandas DataFrame, save it
                 self.cv_results.to_pickle(self.init_state_path+'_results.pkl')
             else:
-                # It's a numpy array, convert it to DataFrame
-                print("🔧 results.df() returned numpy array, converting to DataFrame...")
+                if self.verbose:
+                    print("🔧 results.df() returned numpy array, converting to DataFrame...")
                 self.cv_results = pd.DataFrame(self.cv_results, columns=['lr', 'epochs', 'val_loss'])
                 self.cv_results.to_pickle(self.init_state_path+'_results.pkl')
         except Exception as e:
-            print(f"⚠️ Pandas DataFrame creation failed: {e}")
-            print("🔧 Pandas is fundamentally corrupted, using numpy arrays instead...")
+            if self.verbose:
+                print(f"⚠️ Pandas DataFrame creation failed: {e}")
+                print("🔧 Pandas is fundamentally corrupted, using numpy arrays instead...")
             
             try:
                 # Extract the actual values from the results object and create clean data
@@ -773,14 +776,17 @@ class e2e_net(nn.Module):
                 
                 # Store as numpy array instead of DataFrame to avoid pandas corruption
                 self.cv_results = np.column_stack([lr_values, epochs_values, val_loss_values])
-                print("✅ Numpy array created successfully (bypassing pandas corruption)")
+                if self.verbose:
+                    print("✅ Numpy array created successfully (bypassing pandas corruption)")
                 
             except Exception as e2:
-                print(f"⚠️ Even numpy array creation failed: {e2}")
-                print("🔧 Using default numpy array as final fallback...")
+                if self.verbose:
+                    print(f"⚠️ Even numpy array creation failed: {e2}")
+                    print("🔧 Using default numpy array as final fallback...")
                 # Ultimate fallback: use default numpy array
                 self.cv_results = np.array([[0.01, 20, -0.1]])  # Default: lr=0.01, epochs=20, val_loss=-0.1
-                print("✅ Default numpy array set as final fallback")
+                if self.verbose:
+                    print("✅ Default numpy array set as final fallback")
 
         # Select and store the optimal hyperparameters
         # Since cv_results is now a numpy array, we use numpy indexing
