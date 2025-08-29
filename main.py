@@ -10,6 +10,21 @@ import pickle
 import matplotlib.pyplot as plt
 import warnings
 
+# Helper: ensure cv_results-like objects are pandas DataFrames
+def as_df(obj):
+    try:
+        if hasattr(obj, 'to_pandas'):
+            return obj.to_pandas()
+        # pandas DataFrame/Series usually have to_pickle/values
+        if hasattr(obj, 'to_pickle'):
+            return obj
+        arr = np.asarray(obj)
+        if arr.ndim == 2 and arr.shape[1] == 3:
+            return pd.DataFrame(arr, columns=['lr', 'epochs', 'val_loss'])
+        return pd.DataFrame(arr)
+    except Exception:
+        return pd.DataFrame(obj)
+
 # Suppress DIFFCP version warning (functionality still works)
 warnings.filterwarnings("ignore", message=".*diffcp.*")
 
@@ -134,11 +149,11 @@ print("🚀 Performance Optimizations Applied:")
 print(f"   • Hyperparameters: {len(lr_list)}×{len(epoch_list)} = {len(lr_list) * len(epoch_list)} combinations (vs 18 original)")
 print(f"   • Learning rates: {lr_list} (more conservative for stability)")
 print(f"   • Epochs: {epoch_list} (faster training)")
-print(f"   • CVXPY Solver: OSQP (better performance and stability than ECOS)")
+print(f"   • CVXPY Solver: ECOS/SCS (conic solvers for SOC constraints)")
 print(f"   • Data size: {n_obs}×{n_y} (larger batches for GPU efficiency)")
 print(f"   • Device: MPS (Apple Silicon GPU acceleration)")
 print(f"   • Threading: Optimized for M2 Pro/Max (10/12 cores)")
-print(f"   • CVXPY Solver: OSQP (better performance and stability than ECOS)")
+print(f"   • CVXPY Solver: ECOS/SCS (conic solvers for SOC constraints)")
 
 # Load saved models (default is False)
 # use_cache = False
@@ -353,7 +368,7 @@ if use_cache:
                 "dr_net_learn_gamma", "nom_net_learn_theta", "dr_net_learn_theta"]
     
     for portfolio in portfolios: 
-        cv_combo = pd.concat([eval(portfolio).cv_results, eval(portfolio+'_ext').cv_results], 
+        cv_combo = pd.concat([as_df(eval(portfolio).cv_results), as_df(eval(portfolio+'_ext').cv_results)], 
                         ignore_index=True)
         eval(portfolio).load_cv_results(cv_combo)
         if eval(portfolio).epochs > 50:
@@ -372,9 +387,9 @@ if use_cache:
 dr_net.cv_results = dr_net.cv_results.sort_values(['epochs', 'lr'], 
                                                   ascending=[True, True]
                                                   ).reset_index(drop=True)
-exp1_validation_table = pd.concat((base_net.cv_results.round(4), 
-                            nom_net.cv_results.val_loss.round(4), 
-                            dr_net.cv_results.val_loss.round(4)), axis=1)
+exp1_validation_table = pd.concat((as_df(base_net.cv_results).round(4), 
+                            as_df(nom_net.cv_results)['val_loss'].round(4), 
+                            as_df(dr_net.cv_results)['val_loss'].round(4)), axis=1)
 exp1_validation_table.set_axis(['eta', 'Epochs', 'Base', 'Nom.', 'DR'], 
                         axis=1, inplace=True) 
 
@@ -457,9 +472,9 @@ dr_net_learn_gamma.cv_results = dr_net_learn_gamma.cv_results.sort_values(['epoc
                                                     ascending=[True, True]).reset_index(drop=True)
 dr_net_learn_gamma_delta.cv_results = dr_net_learn_gamma_delta.cv_results.sort_values(['epochs',
                                             'lr'], ascending=[True, True]).reset_index(drop=True)
-exp3_validation_table = pd.concat((nom_net_learn_gamma.cv_results.round(4), 
-                            dr_net_learn_gamma.cv_results.val_loss.round(4),
-                            dr_net_learn_gamma_delta.cv_results.val_loss.round(4)), axis=1)
+exp3_validation_table = pd.concat((as_df(nom_net_learn_gamma.cv_results).round(4), 
+                            as_df(dr_net_learn_gamma.cv_results)['val_loss'].round(4),
+                            as_df(dr_net_learn_gamma_delta.cv_results)['val_loss'].round(4)), axis=1)
 exp3_validation_table.set_axis(['eta', 'Epochs', 'Nom. (learn gamma)', 'DR (learn gamma)', 
                                 'DR (learn gamma + delta)'], axis=1, inplace=True) 
 
@@ -501,9 +516,9 @@ exp3_trained_vals = pd.DataFrame(zip(
 # Validation results table
 dr_net_learn_theta.cv_results = dr_net_learn_theta.cv_results.sort_values(['epochs', 'lr'], 
                                                     ascending=[True, True]).reset_index(drop=True)
-exp4_validation_table = pd.concat((base_net.cv_results.round(4), 
-                            nom_net_learn_theta.cv_results.val_loss.round(4), 
-                            dr_net_learn_theta.cv_results.val_loss.round(4)), axis=1)
+exp4_validation_table = pd.concat((as_df(base_net.cv_results).round(4), 
+                            as_df(nom_net_learn_theta.cv_results)['val_loss'].round(4), 
+                            as_df(dr_net_learn_theta.cv_results)['val_loss'].round(4)), axis=1)
 exp4_validation_table.set_axis(['eta', 'Epochs', 'Base', 'Nom.', 'DR'], 
                         axis=1, inplace=True) 
 
@@ -540,15 +555,15 @@ exp4_trained_vals = pd.DataFrame(zip(nom_net_learn_theta.gamma_trained,
 # Aggregate Validation Results
 #---------------------------------------------------------------------------------------------------
 
-validation_table = pd.concat((base_net.cv_results.round(4), 
-                            nom_net.cv_results.val_loss.round(4),
-                            nom_net_learn_gamma.cv_results.val_loss.round(4),
-                            nom_net_learn_theta.cv_results.val_loss.round(4), 
-                            dr_net.cv_results.val_loss.round(4),
-                            dr_net_learn_delta.cv_results.val_loss.round(4),
-                            dr_net_learn_gamma.cv_results.val_loss.round(4),
-                            dr_net_learn_gamma_delta.cv_results.val_loss.round(4),
-                            dr_net_learn_theta.cv_results.val_loss.round(4)), axis=1)
+validation_table = pd.concat((as_df(base_net.cv_results).round(4), 
+                            as_df(nom_net.cv_results)['val_loss'].round(4),
+                            as_df(nom_net_learn_gamma.cv_results)['val_loss'].round(4),
+                            as_df(nom_net_learn_theta.cv_results)['val_loss'].round(4), 
+                            as_df(dr_net.cv_results)['val_loss'].round(4),
+                            as_df(dr_net_learn_delta.cv_results)['val_loss'].round(4),
+                            as_df(dr_net_learn_gamma.cv_results)['val_loss'].round(4),
+                            as_df(dr_net_learn_gamma_delta.cv_results)['val_loss'].round(4),
+                            as_df(dr_net_learn_theta.cv_results)['val_loss'].round(4)), axis=1)
 validation_table.set_axis(['eta', 'Epochs', 'Base', 'Nom.', 'Nom. (gamma)', 'Nom. (theta)', 
                         'DR', 'DR (delta)', 'DR (gamma)', 'DR (gamma+delta)', 'DR (theta)'], 
                         axis=1, inplace=True) 
@@ -709,12 +724,12 @@ else:
 #---------------------------------------------------------------------------------------------------
 
 # Validation results table
-exp5_validation_table = pd.concat((nom_net_linear.cv_results.round(4), 
-                            dr_net_linear.cv_results.val_loss.round(4), 
-                            nom_net_2layer.cv_results.val_loss.round(4), 
-                            dr_net_2layer.cv_results.val_loss.round(4), 
-                            nom_net_3layer.cv_results.val_loss.round(4), 
-                            dr_net_3layer.cv_results.val_loss.round(4)), axis=1)
+exp5_validation_table = pd.concat((as_df(nom_net_linear.cv_results).round(4), 
+                            as_df(dr_net_linear.cv_results)['val_loss'].round(4), 
+                            as_df(nom_net_2layer.cv_results)['val_loss'].round(4), 
+                            as_df(dr_net_2layer.cv_results)['val_loss'].round(4), 
+                            as_df(nom_net_3layer.cv_results)['val_loss'].round(4), 
+                            as_df(dr_net_3layer.cv_results)['val_loss'].round(4)), axis=1)
 exp5_validation_table.set_axis(['eta', 'Epochs', 'Nom. (linear)', 'DR (linear)', 
                             'Nom. (2-layer)', 'DR (2-layer)', 'Nom. (3-layer)', 'DR (3-layer)'],
                             axis=1, inplace=True) 

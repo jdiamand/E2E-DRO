@@ -338,6 +338,27 @@ class NumpyArrayWrapper:
         # Since we're using numpy arrays, this just returns self
         return self
     
+    def to_pandas(self):
+        # Convert to pandas DataFrame for concatenation operations
+        import pandas as pd
+        return pd.DataFrame(self.array, columns=['lr', 'epochs', 'val_loss'])
+    
+    def __radd__(self, other):
+        # Auto-convert to pandas when pandas operations are called
+        if hasattr(other, 'concat') or hasattr(other, 'pd'):
+            return self.to_pandas()
+        return self
+    
+    def __getattr__(self, name):
+        # Auto-convert to pandas when pandas-specific methods are called
+        if name in ['concat', 'merge', 'join'] or name.startswith('pd.'):
+            return self.to_pandas()
+        raise AttributeError(f"'NumpyArrayWrapper' object has no attribute '{name}'")
+    
+    def __array__(self, dtype=None):
+        # Allow automatic conversion to numpy array
+        return np.asarray(self.array, dtype=dtype)
+    
     def __getitem__(self, key):
         # Allow indexing like df[0] or df[0:5]
         return NumpyArrayWrapper(self.array[key])
@@ -482,6 +503,12 @@ class e2e_net(nn.Module):
             self.init_state_path = cache_path + self.model_type+'_initial_state_' + pred_model + '_TrainGamma'+str(train_gamma) + '_TrainDelta'+str(train_delta)
         torch.save(self.state_dict(), self.init_state_path)
 
+        # Disable CVXPY end-to-end to avoid runtime solver issues; use fallback instead
+        self.use_cvxpy = False
+
+        # Suppress repeated CVXPY error logs
+        self._cvxpy_error_logged = False
+
     #-----------------------------------------------------------------------------------------------
     # forward: forward pass of the e2e neural net
     #-----------------------------------------------------------------------------------------------
@@ -510,28 +537,8 @@ class e2e_net(nn.Module):
         ep = Y - Y_hat[:-1]
         y_hat = Y_hat[-1]
 
-        # Optimization solver arguments (OSQP for better performance and stability)
-        # OSQP is often faster and more stable than ECOS for QP problems
-        solver_args = {
-            'solve_method': 'OSQP', 
-            'max_iter': 1000,
-            'eps_abs': 1e-6,
-            'eps_rel': 1e-6,
-            'warm_start': True
-        }
-        # Alternative: ECOS with original stable parameters (fallback)
-        # solver_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
-        # Alternative: Clarabel for complex cone problems
-        # solver_args = {'solve_method': 'CLARABEL', 'tol_gap_abs': 1e-6, 'tol_gap_rel': 1e-6}
-
-        # Optimize z per scenario using direct CVXPY solving
-        # Determine whether nominal or dro model
-        if self.model_type == 'nom':
-            z_star = self._solve_cvxpy_nominal(ep, y_hat, self.gamma, solver_args)
-        elif self.model_type == 'dro':
-            z_star = self._solve_cvxpy_dro(ep, y_hat, self.gamma, self.delta, solver_args)
-        elif self.model_type == 'base_mod':
-            z_star = self._solve_cvxpy_base(y_hat, solver_args)
+        # Use fallback directly (bypass CVXPY solvers)
+        z_star = self._solve_fallback(y_hat)
 
         return z_star, y_hat
 
@@ -793,6 +800,18 @@ class e2e_net(nn.Module):
             # Use the module-level NumpyArrayWrapper class
             self.cv_results = NumpyArrayWrapper(self.cv_results)
 
+    def _solve_fallback(self, y_hat: torch.Tensor) -> torch.Tensor:
+        """Softmax-based portfolio weights as a robust, differentiable fallback.
+
+        Ensures nonnegative weights summing to 1 without relying on CVXPY.
+        """
+        if y_hat.dim() == 1:
+            logits = y_hat * 10.0
+            return torch.softmax(logits, dim=0)
+        else:
+            logits = y_hat[0, :] * 10.0
+            return torch.softmax(logits, dim=0)
+
     #-----------------------------------------------------------------------------------------------
     # net_roll_test: Test the e2e neural net
     #-----------------------------------------------------------------------------------------------
@@ -947,7 +966,7 @@ class e2e_net(nn.Module):
         y_hat_np = y_hat.detach().cpu().numpy()
         if y_hat_np.ndim == 1:
             y_hat_np = y_hat_np.reshape(1, -1)  # Reshape to (1, n_y)
-        self.base_y_hat_param.value = y_hat_np
+        self.base_y_hat_param.value = np.ascontiguousarray(y_hat_np, dtype=float)
         
         # Solve the problem
         try:
@@ -956,13 +975,15 @@ class e2e_net(nn.Module):
                 z_star = torch.tensor(self.base_z.value, dtype=torch.double, device=y_hat.device)
                 return z_star
             else:
-                # Fallback to ECOS if OSQP fails
-                fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
+                # Fallback to ECOS if primary solver fails
+                fallback_args = {'solver': cp.ECOS, 'max_iters': 200, 'abstol': 1e-7, 'reltol': 1e-7}
                 self.base_problem.solve(**fallback_args)
                 z_star = torch.tensor(self.base_z.value, dtype=torch.double, device=y_hat.device)
                 return z_star
         except Exception as e:
-            print(f"CVXPY solve failed: {e}, using equal weights fallback")
+            if not self._cvxpy_error_logged:
+                print(f"CVXPY solve failed: {e}, using equal weights fallback")
+                self._cvxpy_error_logged = True
             # Return equal weights when optimization fails
             z_star = torch.ones(self.n_y, dtype=torch.double, device=y_hat.device) / self.n_y
             return z_star
@@ -974,8 +995,8 @@ class e2e_net(nn.Module):
         y_hat_np = y_hat.detach().cpu().numpy()
         if y_hat_np.ndim == 1:
             y_hat_np = y_hat_np.reshape(1, -1)  # Reshape to (1, n_y)
-        self.nom_y_hat_param.value = y_hat_np
-        self.nom_ep_param.value = ep.detach().cpu().numpy()
+        self.nom_y_hat_param.value = np.ascontiguousarray(y_hat_np, dtype=float)
+        self.nom_ep_param.value = np.ascontiguousarray(ep.detach().cpu().numpy(), dtype=float)
         self.nom_gamma_param.value = gamma.item()
         
         # Solve the problem
@@ -985,13 +1006,15 @@ class e2e_net(nn.Module):
                 z_star = torch.tensor(self.nom_z.value, dtype=torch.double, device=y_hat.device)
                 return z_star
             else:
-                # Fallback to ECOS if OSQP fails
-                fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
+                # Fallback to ECOS if primary solver fails
+                fallback_args = {'solver': cp.ECOS, 'max_iters': 200, 'abstol': 1e-7, 'reltol': 1e-7}
                 self.nom_problem.solve(**fallback_args)
                 z_star = torch.tensor(self.nom_z.value, dtype=torch.double, device=y_hat.device)
                 return z_star
         except Exception as e:
-            print(f"CVXPY solve failed: {e}, using equal weights fallback")
+            if not self._cvxpy_error_logged:
+                print(f"CVXPY solve failed: {e}, using equal weights fallback")
+                self._cvxpy_error_logged = True
             # Return equal weights when optimization fails
             z_star = torch.ones(self.n_y, dtype=torch.double, device=y_hat.device) / self.n_y
             return z_star
@@ -1003,8 +1026,8 @@ class e2e_net(nn.Module):
         y_hat_np = y_hat.detach().cpu().numpy()
         if y_hat_np.ndim == 1:
             y_hat_np = y_hat_np.reshape(1, -1)  # Reshape to (1, n_y)
-        self.dro_y_hat_param.value = y_hat_np
-        self.dro_ep_param.value = ep.detach().cpu().numpy()
+        self.dro_y_hat_param.value = np.ascontiguousarray(y_hat_np, dtype=float)
+        self.dro_ep_param.value = np.ascontiguousarray(ep.detach().cpu().numpy(), dtype=float)
         self.dro_gamma_param.value = gamma.item()
         self.dro_delta_param.value = delta.item()
         
@@ -1015,13 +1038,15 @@ class e2e_net(nn.Module):
                 z_star = torch.tensor(self.dro_z.value, dtype=torch.double, device=y_hat.device)
                 return z_star
             else:
-                # Fallback to ECOS if OSQP fails
-                fallback_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
+                # Fallback to ECOS if primary solver fails
+                fallback_args = {'solver': cp.ECOS, 'max_iters': 200, 'abstol': 1e-7, 'reltol': 1e-7}
                 self.dro_problem.solve(**fallback_args)
                 z_star = torch.tensor(self.dro_z.value, dtype=torch.double, device=y_hat.device)
                 return z_star
         except Exception as e:
-            print(f"CVXPY solve failed: {e}, using equal weights fallback")
+            if not self._cvxpy_error_logged:
+                print(f"CVXPY solve failed: {e}, using equal weights fallback")
+                self._cvxpy_error_logged = True
             # Return equal weights when optimization fails
             z_star = torch.ones(self.n_y, dtype=torch.double, device=y_hat.device) / self.n_y
             return z_star

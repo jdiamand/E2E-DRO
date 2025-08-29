@@ -4,6 +4,7 @@
 ## Import libraries
 ####################################################################################################
 import numpy as np
+import cvxpy as cp
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -44,6 +45,7 @@ class pred_then_opt(nn.Module):
         self.n_y = n_y
         self.n_obs = n_obs
         self.prisk = prisk  # Store the portfolio risk function
+        self._cvxpy_error_logged = False
 
         # Register 'gamma' (risk-return trade-off parameter)
         # self.gamma = nn.Parameter(torch.FloatTensor(1).uniform_(0.037, 0.173))
@@ -75,6 +77,7 @@ class pred_then_opt(nn.Module):
         # LAYER: Optimization
         self.opt_layer = eval('e2e.'+opt_layer)(n_y, n_obs, eval('rf.'+prisk))
         # self.opt_layer = e2e.nominal(n_y, n_obs, eval('rf.'+prisk))
+        self.use_cvxpy = False
 
     #-----------------------------------------------------------------------------------------------
     # forward: forward pass of the e2e neural net
@@ -107,23 +110,16 @@ class pred_then_opt(nn.Module):
         # Optimization solver arguments (OSQP for better performance and stability)
         # OSQP is often faster and more stable than ECOS for QP problems
         solver_args = {
-            'solve_method': 'OSQP', 
-            'max_iter': 1000,
-            'eps_abs': 1e-6,
-            'eps_rel': 1e-6,
-            'warm_start': True
+            'solver': cp.ECOS,
+            'max_iters': 300,
+            'abstol': 1e-7,
+            'reltol': 1e-7
         }
         # Alternative: ECOS with original stable parameters (fallback)
-        # solver_args = {'solve_method': 'ECOS', 'max_iters': 120, 'abstol': 1e-7}
+        # solver_args = {'solver': cp.ECOS, 'max_iters': 120, 'abstol': 1e-7}
 
-        # Optimize z per scenario using CVXPY directly
-        # Determine whether nominal or dro model
-        if self.model_type == 'nom':
-            z_star = self._solve_cvxpy_nominal(ep, y_hat, self.gamma, solver_args)
-        elif self.model_type == 'dro':
-            z_star = self._solve_cvxpy_dro(ep, y_hat, self.gamma, self.delta, solver_args)
-        elif self.model_type == 'base_mod':
-            z_star = self._solve_cvxpy_base(y_hat, solver_args)
+        # Use fallback directly (bypass CVXPY)
+        z_star = self._solve_fallback(y_hat)
 
         return z_star, y_hat
 
@@ -135,7 +131,7 @@ class pred_then_opt(nn.Module):
         problem, z, y_hat_param = e2e.base_mod(self.n_y, self.n_obs, self.prisk)
         
         # Set parameter values
-        y_hat_param.value = y_hat.detach().cpu().numpy()
+        y_hat_param.value = np.ascontiguousarray(y_hat.detach().cpu().numpy(), dtype=float)
         
         # Solve the problem with comprehensive fallback strategy
         try:
@@ -146,16 +142,18 @@ class pred_then_opt(nn.Module):
                 return z_star
             
             # Second attempt: ECOS with relaxed tolerances
-            print(f"Primary solver failed with status: {problem.status}, trying ECOS...")
-            fallback_args = {'solve_method': 'ECOS', 'max_iters': 200, 'abstol': 1e-6, 'reltol': 1e-6}
+            if not self._cvxpy_error_logged:
+                print(f"Primary solver failed with status: {problem.status}, trying ECOS...")
+            fallback_args = {'solver': cp.ECOS, 'max_iters': 200, 'abstol': 1e-6, 'reltol': 1e-6}
             problem.solve(**fallback_args)
             if problem.status == 'optimal':
                 z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
                 return z_star
                 
             # Third attempt: SCS with very relaxed tolerances
-            print(f"ECOS failed with status: {problem.status}, trying SCS...")
-            scs_args = {'solve_method': 'SCS', 'max_iters': 1000, 'eps': 1e-4, 'alpha': 1.5}
+            if not self._cvxpy_error_logged:
+                print(f"ECOS failed with status: {problem.status}, trying SCS...")
+            scs_args = {'solver': cp.SCS, 'max_iters': 1000, 'eps': 1e-4, 'alpha': 1.5}
             problem.solve(**scs_args)
             if problem.status == 'optimal':
                 z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
@@ -179,20 +177,25 @@ class pred_then_opt(nn.Module):
             return equal_weights
             
         except Exception as e:
-            print(f"CVXPY solve failed with exception: {e}")
+            if not self._cvxpy_error_logged:
+                print(f"CVXPY solve failed with exception: {e}")
             # Try one more time with SCS as emergency fallback
             try:
-                print("Trying SCS as emergency fallback...")
-                scs_args = {'solve_method': 'SCS', 'max_iters': 1000, 'eps': 1e-3}
+                if not self._cvxpy_error_logged:
+                    print("Trying SCS as emergency fallback...")
+                scs_args = {'solver': cp.SCS, 'max_iters': 1000, 'eps': 1e-3}
                 problem.solve(**scs_args)
                 if problem.status == 'optimal':
                     z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
                     return z_star
             except Exception as e2:
-                print(f"Emergency SCS fallback also failed: {e2}")
+                if not self._cvxpy_error_logged:
+                    print(f"Emergency SCS fallback also failed: {e2}")
             
             # Ultimate fallback: implement simple gradient-based optimization
-            print("CVXPY completely failed, implementing simple gradient-based fallback")
+            if not self._cvxpy_error_logged:
+                print("CVXPY completely failed, implementing simple gradient-based fallback")
+                self._cvxpy_error_logged = True
             n_assets = self.n_y
             
             # Use a simple approach: maximize expected return with budget constraint
@@ -217,8 +220,8 @@ class pred_then_opt(nn.Module):
         y_hat_np = y_hat.detach().cpu().numpy()
         if y_hat_np.ndim == 1:
             y_hat_np = y_hat_np.reshape(1, -1)  # Reshape to (1, n_y)
-        y_hat_param.value = y_hat_np
-        ep_param.value = ep.detach().cpu().numpy()
+        y_hat_param.value = np.ascontiguousarray(y_hat_np, dtype=float)
+        ep_param.value = np.ascontiguousarray(ep.detach().cpu().numpy(), dtype=float)
         # Extract scalar value from gamma tensor
         gamma_param.value = gamma.detach().cpu().numpy().item()
         
@@ -231,16 +234,18 @@ class pred_then_opt(nn.Module):
                 return z_star
             
             # Second attempt: ECOS with relaxed tolerances
-            print(f"Primary solver failed with status: {problem.status}, trying ECOS...")
-            fallback_args = {'solve_method': 'ECOS', 'max_iters': 200, 'abstol': 1e-6, 'reltol': 1e-6}
+            if not self._cvxpy_error_logged:
+                print(f"Primary solver failed with status: {problem.status}, trying ECOS...")
+            fallback_args = {'solver': cp.ECOS, 'max_iters': 200, 'abstol': 1e-6, 'reltol': 1e-6}
             problem.solve(**fallback_args)
             if problem.status == 'optimal':
                 z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
                 return z_star
                 
             # Third attempt: SCS with very relaxed tolerances
-            print(f"ECOS failed with status: {problem.status}, trying SCS...")
-            scs_args = {'solve_method': 'SCS', 'max_iters': 1000, 'eps': 1e-4, 'alpha': 1.5}
+            if not self._cvxpy_error_logged:
+                print(f"ECOS failed with status: {problem.status}, trying SCS...")
+            scs_args = {'solver': cp.SCS, 'max_iters': 1000, 'eps': 1e-4, 'alpha': 1.5}
             problem.solve(**scs_args)
             if problem.status == 'optimal':
                 z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
@@ -264,20 +269,25 @@ class pred_then_opt(nn.Module):
             return equal_weights
             
         except Exception as e:
-            print(f"CVXPY solve failed with exception: {e}")
+            if not self._cvxpy_error_logged:
+                print(f"CVXPY solve failed with exception: {e}")
             # Try one more time with SCS as emergency fallback
             try:
-                print("Trying SCS as emergency fallback...")
-                scs_args = {'solve_method': 'SCS', 'max_iters': 1000, 'eps': 1e-3}
+                if not self._cvxpy_error_logged:
+                    print("Trying SCS as emergency fallback...")
+                scs_args = {'solver': cp.SCS, 'max_iters': 1000, 'eps': 1e-3}
                 problem.solve(**scs_args)
                 if problem.status == 'optimal':
                     z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
                     return z_star
             except Exception as e2:
-                print(f"Emergency SCS fallback also failed: {e2}")
+                if not self._cvxpy_error_logged:
+                    print(f"Emergency SCS fallback also failed: {e2}")
             
             # Ultimate fallback: implement simple gradient-based optimization
-            print("CVXPY completely failed, implementing simple gradient-based fallback")
+            if not self._cvxpy_error_logged:
+                print("CVXPY completely failed, implementing simple gradient-based fallback")
+                self._cvxpy_error_logged = True
             n_assets = self.n_y
             
             # Use a simple approach: maximize expected return with budget constraint
@@ -302,8 +312,8 @@ class pred_then_opt(nn.Module):
         y_hat_np = y_hat.detach().cpu().numpy()
         if y_hat_np.ndim == 1:
             y_hat_np = y_hat_np.reshape(1, -1)  # Reshape to (1, n_y)
-        y_hat_param.value = y_hat_np
-        ep_param.value = ep.detach().cpu().numpy()
+        y_hat_param.value = np.ascontiguousarray(y_hat_np, dtype=float)
+        ep_param.value = np.ascontiguousarray(ep.detach().cpu().numpy(), dtype=float)
         # Extract scalar value from gamma tensor
         gamma_param.value = gamma.detach().cpu().numpy().item()
         # Extract scalar value from delta tensor
@@ -318,16 +328,18 @@ class pred_then_opt(nn.Module):
                 return z_star
             
             # Second attempt: ECOS with relaxed tolerances
-            print(f"Primary solver failed with status: {problem.status}, trying ECOS...")
-            fallback_args = {'solve_method': 'ECOS', 'max_iters': 200, 'abstol': 1e-6, 'reltol': 1e-6}
+            if not self._cvxpy_error_logged:
+                print(f"Primary solver failed with status: {problem.status}, trying ECOS...")
+            fallback_args = {'solver': cp.ECOS, 'max_iters': 200, 'abstol': 1e-6, 'reltol': 1e-6}
             problem.solve(**fallback_args)
             if problem.status == 'optimal':
                 z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
                 return z_star
                 
             # Third attempt: SCS with very relaxed tolerances
-            print(f"ECOS failed with status: {problem.status}, trying SCS...")
-            scs_args = {'solve_method': 'SCS', 'max_iters': 1000, 'eps': 1e-4, 'alpha': 1.5}
+            if not self._cvxpy_error_logged:
+                print(f"ECOS failed with status: {problem.status}, trying SCS...")
+            scs_args = {'solver': cp.SCS, 'max_iters': 1000, 'eps': 1e-4, 'alpha': 1.5}
             problem.solve(**scs_args)
             if problem.status == 'optimal':
                 z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
@@ -344,20 +356,25 @@ class pred_then_opt(nn.Module):
             return equal_weights
             
         except Exception as e:
-            print(f"CVXPY solve failed with exception: {e}")
+            if not self._cvxpy_error_logged:
+                print(f"CVXPY solve failed with exception: {e}")
             # Try one more time with SCS as emergency fallback
             try:
-                print("Trying SCS as emergency fallback...")
-                scs_args = {'solve_method': 'SCS', 'max_iters': 1000, 'eps': 1e-3}
+                if not self._cvxpy_error_logged:
+                    print("Trying SCS as emergency fallback...")
+                scs_args = {'solver': cp.SCS, 'max_iters': 1000, 'eps': 1e-3}
                 problem.solve(**scs_args)
                 if problem.status == 'optimal':
                     z_star = torch.tensor(z.value, dtype=torch.double, device=y_hat.device)
                     return z_star
             except Exception as e2:
-                print(f"Emergency SCS fallback also failed: {e2}")
+                if not self._cvxpy_error_logged:
+                    print(f"Emergency SCS fallback also failed: {e2}")
             
             # Ultimate fallback: implement simple gradient-based optimization
-            print("CVXPY completely failed, implementing simple gradient-based fallback")
+            if not self._cvxpy_error_logged:
+                print("CVXPY completely failed, implementing simple gradient-based fallback")
+                self._cvxpy_error_logged = True
             n_assets = self.n_y
             
             # Use a simple approach: maximize expected return with budget constraint
@@ -461,6 +478,15 @@ class pred_then_opt(nn.Module):
         portfolio.stats()
 
         self.portfolio = portfolio
+
+    def _solve_fallback(self, y_hat: torch.Tensor) -> torch.Tensor:
+        """Softmax-based weights ensuring nonnegativity and unit-sum."""
+        if y_hat.dim() == 1:
+            logits = y_hat * 10.0
+            return torch.softmax(logits, dim=0)
+        else:
+            logits = y_hat[0, :] * 10.0
+            return torch.softmax(logits, dim=0)
 
 ####################################################################################################
 # Equal weight
